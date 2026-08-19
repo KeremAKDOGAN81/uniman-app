@@ -1,39 +1,56 @@
 # UniMan
 
-Öğrenci not, GPA, ders programı ve hatırlatma uygulaması. React Native (Expo SDK 57), veriler telefonda SQLite’ta kalır, backend yoktur.
+[Türkçe](README.tr.md)
 
-Web referans: [UniMan](https://github.com/KeremAKDOGAN81/UniMan)
+Student app for grades, GPA, weekly schedule, notes, and reminders. Built with React Native (Expo SDK 57). Data stays on the phone in SQLite — there is no backend.
 
-## Ne var?
+Web counterpart: [UniMan](https://github.com/KeremAKDOGAN81/UniMan)
 
-- **Hesap** — vize + istenen sayıda ek etkinlik (yüzde ile). Finalden kaç alman gerektiği web UniMan ile aynı formülle hesaplanır.
-- **AGNO** — AKTS × harf katsayısı, 4.00 ve 100’lük.
-- **Program** — Pazartesi–Cuma saatlik dersler; ana sayfada bugün.
-- **Takip** — sınav/ödev yerel bildirimi, devamsızlık, kısa notlar.
-- **Yedek** — JSON dışa/içe aktar (ana sayfa).
-- Açık renkli tema varsayılan; koyu temaya geçilebilir.
+**Package:** `com.kodlarinefendisi.uniman`
 
-## Mimari
+## Features
+
+- **Home** — today’s classes with now / next, exam countdown, GPA snapshot, JSON backup.
+- **Calc** — midterm plus extra activities (each with a weight). Required final score uses the same formula as web UniMan. GPA (AGNO) lives here as a second pane: ECTS × letter points, 4.00 and 100-point scales.
+- **Schedule** — Monday–Friday slots. Optional local notification 1 / 2 / 3 hours before class (repeats weekly).
+- **Notes** — quick notes; prefilled from a class on the schedule. Search by title or body.
+- **Track** — exam/homework reminders (local notifications) and attendance.
+- Light theme by default; dark theme is optional and persisted.
+
+## Architecture
 
 ```
-Ekranlar (Expo Router)
+Screens (Expo Router)
   → Zustand
   → expo-sqlite (uniman.db)
-  → expo-notifications (yerel)
+  → expo-notifications (local)
 ```
 
-İş kuralları `lib/finalGrade.ts` ve `lib/gpa.ts` içinde; UI’dan ayrı durur.
+Grade math lives in `lib/finalGrade.ts` and `lib/gpa.ts`, not in the UI.
 
-## Çalıştırma
+## Run locally
+
+Needs JDK 17, Android SDK, and a device or emulator. First native compile:
 
 ```bash
 npm install
-npx expo run:android   # ilk native derleme (emülatör)
+npx expo run:android
+```
+
+Day-to-day JS:
+
+```bash
 npx expo start --dev-client
 ```
 
-Sonraki JS değişiklikleri Fast Refresh ile gelir. Native paket eklenince `run:android` tekrar gerekir.
+Rebuild native code only after adding a native module.
 
-## Paket
+## Sideload APK (Android)
 
-`com.kodlarinefendisi.uniman`
+Not a Windows `.exe`. Install the `.apk` from EAS:
+
+```bash
+npx eas-cli build --platform android --profile preview
+```
+
+When the build finishes, open the Expo page, download the APK, copy it to the phone, and install (allow unknown sources if asked). iPhone cannot install this APK.
