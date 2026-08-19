@@ -1,55 +1,67 @@
-import { useFonts } from 'expo-font';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { palettes } from '@/constants/theme';
+import { configureNotifications } from '@/lib/notifications';
+import { useAppStore } from '@/store/useAppStore';
 
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+  const ready = useAppStore((state) => state.ready);
+  const theme = useAppStore((state) => state.theme);
+  const hydrate = useAppStore((state) => state.hydrate);
+  const c = palettes[theme];
 
   useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
+    let cancelled = false;
+    (async () => {
+      await configureNotifications();
+      await hydrate();
+      if (!cancelled) {
+        await SplashScreen.hideAsync();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrate]);
 
-  if (!loaded) {
-    return null;
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, backgroundColor: palettes.light.bg, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={palettes.light.accent} />
+      </View>
+    );
   }
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const navTheme = {
+    ...(theme === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(theme === 'dark' ? DarkTheme.colors : DefaultTheme.colors),
+      background: c.bg,
+      card: c.bg,
+      text: c.text,
+      border: c.line,
+      primary: c.accent,
+    },
+  };
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+    <ThemeProvider value={navTheme}>
+      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+        <Stack.Screen name="(tabs)" />
       </Stack>
     </ThemeProvider>
   );

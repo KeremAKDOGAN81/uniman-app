@@ -6,13 +6,14 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "uniman",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kodlarinefendisi.uniman"
     },
     "android": {
       "package": "com.kodlarinefendisi.uniman",
+      "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -41,12 +42,19 @@
         {
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0b0b0b"
+          "backgroundColor": "#EAF2FF"
         }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f19873cd-f291-4d1d-b0bf-57afa3d27cb4"
+      }
+    },
+    "owner": "kereminal"
   }
 }
