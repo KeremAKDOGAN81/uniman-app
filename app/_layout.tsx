@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -16,6 +16,25 @@ export const unstable_settings = {
 };
 
 SplashScreen.preventAutoHideAsync();
+
+function OnboardingGate({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const segments = useSegments();
+  const ready = useAppStore((state) => state.ready);
+  const onboardingDone = useAppStore((state) => state.onboardingDone);
+
+  useEffect(() => {
+    if (!ready) return;
+    const onOnboarding = String(segments[0] ?? '') === 'onboarding';
+    if (!onboardingDone && !onOnboarding) {
+      router.replace('/onboarding' as never);
+    } else if (onboardingDone && onOnboarding) {
+      router.replace('/(tabs)' as never);
+    }
+  }, [ready, onboardingDone, segments, router]);
+
+  return <>{children}</>;
+}
 
 export default function RootLayout() {
   const ready = useAppStore((state) => state.ready);
@@ -60,9 +79,14 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+      <OnboardingGate>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+        </Stack>
+      </OnboardingGate>
     </ThemeProvider>
   );
 }

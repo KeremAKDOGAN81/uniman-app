@@ -34,6 +34,7 @@ type ScheduleRow = {
   room: string;
   remind_hours?: number | null;
   notification_id?: string | null;
+  color?: string | null;
 };
 
 type ReminderRow = {
@@ -117,6 +118,9 @@ async function migrateScheduleColumns(database: SQLite.SQLiteDatabase): Promise<
   if (!names.has('notification_id')) {
     await database.execAsync('ALTER TABLE schedule ADD COLUMN notification_id TEXT');
   }
+  if (!names.has('color')) {
+    await database.execAsync("ALTER TABLE schedule ADD COLUMN color TEXT NOT NULL DEFAULT '#4F46E5'");
+  }
 }
 
 function mapCourse(row: CourseRow): Course {
@@ -182,6 +186,7 @@ export async function getSchedule(): Promise<ScheduleItem[]> {
       ? (row.remind_hours ?? 0)
       : 0) as ScheduleItem['remindHours'],
     notificationId: row.notification_id ?? null,
+    color: row.color || '#4F46E5',
   }));
 }
 
@@ -193,18 +198,21 @@ export async function insertScheduleItem(input: {
   room: string;
   remindHours?: ScheduleItem['remindHours'];
   notificationId?: string | null;
+  color?: string;
 }): Promise<ScheduleItem> {
   const remindHours = input.remindHours ?? 0;
   const notificationId = input.notificationId ?? null;
+  const color = input.color || '#4F46E5';
   const result = await getDb().runAsync(
-    'INSERT INTO schedule (weekday, title, start_time, end_time, room, remind_hours, notification_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO schedule (weekday, title, start_time, end_time, room, remind_hours, notification_id, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     input.weekday,
     input.title,
     input.startTime,
     input.endTime,
     input.room,
     remindHours,
-    notificationId
+    notificationId,
+    color
   );
   return {
     id: Number(result.lastInsertRowId),
@@ -215,6 +223,7 @@ export async function insertScheduleItem(input: {
     room: input.room,
     remindHours,
     notificationId,
+    color,
   };
 }
 
@@ -344,6 +353,19 @@ export async function deleteExamTarget(id: number): Promise<void> {
   await getDb().runAsync('DELETE FROM exam_targets WHERE id = ?', id);
 }
 
+export async function updateExamTarget(
+  id: number,
+  input: { name: string; yearPoints: number; requiredFinal: number }
+): Promise<void> {
+  await getDb().runAsync(
+    'UPDATE exam_targets SET name = ?, year_points = ?, required_final = ? WHERE id = ?',
+    input.name,
+    input.yearPoints,
+    input.requiredFinal,
+    id
+  );
+}
+
 export async function getAttendance(): Promise<AttendanceItem[]> {
   const rows = await getDb().getAllAsync<{
     id: number;
@@ -436,6 +458,103 @@ export async function insertNote(input: { title: string; body: string }): Promis
 
 export async function deleteNote(id: number): Promise<void> {
   await getDb().runAsync('DELETE FROM notes WHERE id = ?', id);
+}
+
+export async function updateNote(
+  id: number,
+  input: { title: string; body: string }
+): Promise<void> {
+  await getDb().runAsync(
+    'UPDATE notes SET title = ?, body = ? WHERE id = ?',
+    input.title,
+    input.body,
+    id
+  );
+}
+
+export async function updateCourse(
+  id: number,
+  input: { name: string; ects: number; letter: LetterGrade; score100: number | null }
+): Promise<void> {
+  const points = pointsFromLetter(input.letter);
+  await getDb().runAsync(
+    'UPDATE courses SET name = ?, ects = ?, letter = ?, points = ?, score100 = ? WHERE id = ?',
+    input.name,
+    input.ects,
+    input.letter,
+    points,
+    input.score100,
+    id
+  );
+}
+
+export async function updateScheduleItem(
+  id: number,
+  input: {
+    weekday: Weekday;
+    title: string;
+    startTime: string;
+    endTime: string;
+    room: string;
+    color: string;
+    remindHours: ScheduleItem['remindHours'];
+    notificationId: string | null;
+  }
+): Promise<void> {
+  await getDb().runAsync(
+    `UPDATE schedule SET weekday = ?, title = ?, start_time = ?, end_time = ?, room = ?,
+     color = ?, remind_hours = ?, notification_id = ? WHERE id = ?`,
+    input.weekday,
+    input.title,
+    input.startTime,
+    input.endTime,
+    input.room,
+    input.color,
+    input.remindHours,
+    input.notificationId,
+    id
+  );
+}
+
+export async function updateAttendance(
+  id: number,
+  input: { name: string; limit: number; used: number }
+): Promise<void> {
+  await getDb().runAsync(
+    'UPDATE attendance SET name = ?, max_limit = ?, used = ? WHERE id = ?',
+    input.name,
+    input.limit,
+    input.used,
+    id
+  );
+}
+
+export async function updateReminder(
+  id: number,
+  input: {
+    title: string;
+    kind: ReminderKind;
+    dueAt: string;
+    notificationId: string | null;
+  }
+): Promise<void> {
+  await getDb().runAsync(
+    'UPDATE reminders SET title = ?, kind = ?, due_at = ?, notification_id = ? WHERE id = ?',
+    input.title,
+    input.kind,
+    input.dueAt,
+    input.notificationId,
+    id
+  );
+}
+
+export async function getOnboardingDone(): Promise<boolean> {
+  const value = await getSetting('onboarding_done');
+  return value === '1';
+}
+
+export async function setOnboardingDone(done: boolean): Promise<void> {
+  await setSetting('onboarding_done', done ? '1' : '0');
 }
 
 export async function wipeUserTables(): Promise<void> {

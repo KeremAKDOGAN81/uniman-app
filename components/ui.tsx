@@ -215,12 +215,30 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
   );
 }
 
-export function EmptyState({ title, body }: { title: string; body: string }) {
+export function EmptyState({
+  title,
+  body,
+  emoji = '📭',
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  body: string;
+  emoji?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   const c = useColors();
   return (
-    <Card>
-      <Text style={{ color: c.text, fontSize: 16, fontWeight: '700' }}>{title}</Text>
-      <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20, marginTop: 6 }}>{body}</Text>
+    <Card style={{ alignItems: 'center', gap: 8 }}>
+      <Text style={{ fontSize: 36 }}>{emoji}</Text>
+      <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', textAlign: 'center' }}>{title}</Text>
+      <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20, textAlign: 'center' }}>{body}</Text>
+      {actionLabel && onAction ? (
+        <View style={{ marginTop: 6, alignSelf: 'stretch' }}>
+          <PrimaryButton label={actionLabel} onPress={onAction} />
+        </View>
+      ) : null}
     </Card>
   );
 }

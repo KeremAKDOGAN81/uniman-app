@@ -23,6 +23,7 @@ import {
 } from '@/components/ui';
 import { CountNumber } from '@/components/CountNumber';
 import { GradesPanel } from './grades';
+import { confirmDelete } from '@/lib/confirm';
 import { calculateRequiredFinal, finalMessage } from '@/lib/finalGrade';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { useAppStore } from '@/store/useAppStore';
@@ -38,8 +39,10 @@ export default function CalculatorScreen() {
   const c = useColors();
   const examTargets = useAppStore((state) => state.examTargets);
   const addExamTarget = useAppStore((state) => state.addExamTarget);
+  const updateExamTarget = useAppStore((state) => state.updateExamTarget);
   const removeExamTarget = useAppStore((state) => state.removeExamTarget);
 
+  const [editingTargetId, setEditingTargetId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [passing, setPassing] = useState('60');
   const [midterm, setMidterm] = useState('');
@@ -49,6 +52,15 @@ export default function CalculatorScreen() {
   const [resultText, setResultText] = useState<string | null>(null);
   const [requiredFinal, setRequiredFinal] = useState<number | null>(null);
   const [resultTone, setResultTone] = useState<'critical' | 'hard' | 'ok' | 'easy' | 'passed'>('ok');
+
+  const resetTargetForm = () => {
+    setEditingTargetId(null);
+    setName('');
+    setPassing('60');
+    setMidterm('');
+    setMidtermWeight('40');
+    setExtras([]);
+  };
 
   const toneColor = {
     critical: c.danger,
@@ -85,11 +97,17 @@ export default function CalculatorScreen() {
       `${message.text}\nYıl içi: ${calc.yearPoints.toFixed(1)} puan · Final ağırlığı %${calc.finalWeight}`
     );
     hapticSuccess();
-    await addExamTarget({
+    const payload = {
       name: name.trim() || 'İsimsiz Ders',
       yearPoints: Number(calc.yearPoints.toFixed(1)),
       requiredFinal: calc.requiredFinal,
-    });
+    };
+    if (editingTargetId !== null) {
+      await updateExamTarget(editingTargetId, payload);
+      setEditingTargetId(null);
+    } else {
+      await addExamTarget(payload);
+    }
   };
 
   return (
@@ -182,7 +200,11 @@ export default function CalculatorScreen() {
               ))}
 
               <GhostButton label="+ Ek etkinlik ekle (ödev, quiz, proje…)" onPress={onAddExtra} />
-              <PrimaryButton label="Hesapla" onPress={onCalculate} />
+              <PrimaryButton
+                label={editingTargetId !== null ? 'Güncelle ve hesapla' : 'Hesapla'}
+                onPress={onCalculate}
+              />
+              {editingTargetId !== null ? <GhostButton label="Vazgeç" onPress={resetTargetForm} /> : null}
             </Card>
 
             {resultText && requiredFinal !== null ? (
@@ -195,7 +217,13 @@ export default function CalculatorScreen() {
 
             <Text style={{ color: c.text, fontSize: 18, fontWeight: '800', marginTop: 8 }}>Kaydedilen dersler</Text>
             {examTargets.length === 0 ? (
-              <EmptyState title="Henüz hesap yok" body="Vize + yüzdesi, istersen ek etkinlik. Hesapla deyince yıl içi puan ve final hedefi burada durur." />
+              <EmptyState
+                emoji="🎯"
+                title="Henüz hesap yok"
+                body="Vize + yüzdesi, istersen ek etkinlik. Hesapla deyince yıl içi puan ve final hedefi burada durur."
+                actionLabel="Örnek ders adı koy"
+                onAction={() => setName('Veri Yapıları')}
+              />
             ) : (
               examTargets.map((item) => (
                 <Card key={item.id} style={{ gap: 4 }}>
@@ -214,7 +242,24 @@ export default function CalculatorScreen() {
                     </View>
                   </View>
                   <Muted>Yıl içi puanı: {item.yearPoints}</Muted>
-                  <GhostButton label="Sil" danger onPress={() => removeExamTarget(item.id)} />
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <GhostButton
+                      label="Düzenle"
+                      onPress={() => {
+                        setEditingTargetId(item.id);
+                        setName(item.name);
+                        setResultText(null);
+                        setRequiredFinal(null);
+                      }}
+                    />
+                    <GhostButton
+                      label="Sil"
+                      danger
+                      onPress={() =>
+                        confirmDelete('Hesap silinsin mi?', item.name, () => removeExamTarget(item.id))
+                      }
+                    />
+                  </View>
                 </Card>
               ))
             )}

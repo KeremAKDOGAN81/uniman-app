@@ -1,9 +1,19 @@
 import { Pressable, ScrollView, Text, View } from 'react-native';
 
-import { useColors } from '@/components/ui';
+import { Field, useColors } from '@/components/ui';
 import { padTime, toDateInput } from '@/lib/dates';
 
-const TIMES = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '21:00'];
+function buildTimes(): string[] {
+  const slots: string[] = [];
+  for (let hour = 8; hour <= 21; hour++) {
+    const h = String(hour).padStart(2, '0');
+    slots.push(`${h}:00`);
+    slots.push(`${h}:30`);
+  }
+  return slots;
+}
+
+const TIMES = buildTimes();
 
 function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -33,7 +43,9 @@ export function DateTimePicker({
   onChange: (date: string, time: string) => void;
 }) {
   const c = useColors();
-  const days = [0, 1, 2, 3, 4, 5, 6].map((offset) => addDays(new Date(), offset));
+  const days = Array.from({ length: 42 }, (_, offset) => addDays(new Date(), offset));
+  const padded = padTime(time);
+  const knownSlot = TIMES.includes(padded);
 
   return (
     <View style={{ gap: 10 }}>
@@ -65,7 +77,7 @@ export function DateTimePicker({
       </ScrollView>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {TIMES.map((slot) => {
-          const selected = padTime(time) === slot;
+          const selected = padded === slot;
           return (
             <Pressable
               key={slot}
@@ -83,6 +95,13 @@ export function DateTimePicker({
           );
         })}
       </ScrollView>
+      <Field
+        label="Özel saat (SS:DD)"
+        value={knownSlot ? '' : time}
+        onChangeText={(value) => onChange(date, value)}
+        placeholder={padded || '14:30'}
+        keyboardType="numbers-and-punctuation"
+      />
     </View>
   );
 }

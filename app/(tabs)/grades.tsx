@@ -15,6 +15,7 @@ import {
   useColors,
 } from '@/components/ui';
 import { letterColors } from '@/constants/theme';
+import { confirmDelete } from '@/lib/confirm';
 import { computeGpa100, computeGpa4, formatGpa, letterFromScore, pointsFromLetter } from '@/lib/gpa';
 import { LETTER_GRADES, type LetterGrade } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -23,7 +24,9 @@ export function GradesPanel() {
   const c = useColors();
   const courses = useAppStore((state) => state.courses);
   const addCourse = useAppStore((state) => state.addCourse);
+  const updateCourse = useAppStore((state) => state.updateCourse);
   const removeCourse = useAppStore((state) => state.removeCourse);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [name, setName] = useState('');
   const [ects, setEcts] = useState('5');
   const [score, setScore] = useState('');
@@ -39,7 +42,23 @@ export function GradesPanel() {
     }
   };
 
-  const onAdd = async () => {
+  const resetForm = () => {
+    setEditingId(null);
+    setName('');
+    setEcts('5');
+    setScore('');
+    setLetter('CC');
+  };
+
+  const onEdit = (course: (typeof courses)[number]) => {
+    setEditingId(course.id);
+    setName(course.name);
+    setEcts(String(course.ects));
+    setScore(course.score100 !== null ? String(course.score100) : '');
+    setLetter(course.letter);
+  };
+
+  const onSave = async () => {
     const trimmed = name.trim();
     const credits = Number(ects.replace(',', '.'));
     const numeric = score.trim() ? Number(score.replace(',', '.')) : null;
@@ -55,14 +74,18 @@ export function GradesPanel() {
       Alert.alert('Geçersiz not', '100’lük not 0–100 arasında olmalı.');
       return;
     }
-    await addCourse({
+    const payload = {
       name: trimmed,
       ects: credits,
       letter: numeric === null ? letter : letterFromScore(numeric),
       score100: numeric,
-    });
-    setName('');
-    setScore('');
+    };
+    if (editingId !== null) {
+      await updateCourse(editingId, payload);
+    } else {
+      await addCourse(payload);
+    }
+    resetForm();
   };
 
   return (
@@ -85,7 +108,9 @@ export function GradesPanel() {
       </View>
 
       <Card style={{ gap: 12 }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>Ders ekle</Text>
+        <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>
+          {editingId !== null ? 'Dersi düzenle' : 'Ders ekle'}
+        </Text>
         <Field label="Ders adı" value={name} onChangeText={setName} placeholder="Örn. Veri Yapıları" />
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1 }}>
@@ -116,12 +141,23 @@ export function GradesPanel() {
             />
           ))}
         </ScrollView>
-        <PrimaryButton label="Dersi kaydet" onPress={onAdd} />
+        <PrimaryButton label={editingId !== null ? 'Güncelle' : 'Dersi kaydet'} onPress={onSave} />
+        {editingId !== null ? <GhostButton label="Vazgeç" onPress={resetForm} /> : null}
       </Card>
 
       <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>Dönem dersleri</Text>
       {courses.length === 0 ? (
-        <EmptyState title="Henüz ders yok" body="Ders adı, AKTS, harf veya 100’lük not. AGNO kartları hemen güncellenir." />
+        <EmptyState
+          emoji="📊"
+          title="Henüz ders yok"
+          body="Ders adı, AKTS, harf veya 100’lük not. AGNO kartları hemen güncellenir."
+          actionLabel="Örnek ders koy"
+          onAction={() => {
+            setName('Veri Yapıları');
+            setEcts('5');
+            setLetter('BB');
+          }}
+        />
       ) : (
         courses.map((course) => (
           <Card key={course.id} style={{ gap: 4 }}>
@@ -137,7 +173,16 @@ export function GradesPanel() {
                 {course.letter}
               </Text>
             </View>
-            <GhostButton label="Sil" danger onPress={() => removeCourse(course.id)} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <GhostButton label="Düzenle" onPress={() => onEdit(course)} />
+              <GhostButton
+                label="Sil"
+                danger
+                onPress={() =>
+                  confirmDelete('Ders silinsin mi?', course.name, () => removeCourse(course.id))
+                }
+              />
+            </View>
           </Card>
         ))
       )}

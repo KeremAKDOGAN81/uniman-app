@@ -16,9 +16,7 @@
       "userInterfaceStyle": "automatic",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
@@ -44,7 +42,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#EAF2FF"
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true
@@ -53,7 +52,8 @@
       "router": {},
       "eas": {
         "projectId": "f19873cd-f291-4d1d-b0bf-57afa3d27cb4"
-      }
+      },
+      "privacy": "Veriler yalnızca cihazda (SQLite). Hesap yok. Gizlilik metni uygulama içi /privacy ekranında."
     },
     "owner": "kereminal"
   }

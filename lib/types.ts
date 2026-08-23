@@ -17,6 +17,19 @@ export type Course = {
 
 export type RemindHours = 0 | 1 | 2 | 3;
 
+export const COURSE_COLORS = [
+  '#0F766E',
+  '#EA580C',
+  '#BE185D',
+  '#1D4ED8',
+  '#15803D',
+  '#CA8A04',
+  '#7C3AED',
+  '#0891B2',
+] as const;
+
+export type CourseColor = (typeof COURSE_COLORS)[number];
+
 export type ScheduleItem = {
   id: number;
   weekday: Weekday;
@@ -26,6 +39,7 @@ export type ScheduleItem = {
   room: string;
   remindHours: RemindHours;
   notificationId: string | null;
+  color: string;
 };
 
 export type ReminderKind = 'sinav' | 'odev';
