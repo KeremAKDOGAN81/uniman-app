@@ -4,8 +4,6 @@
 
 Program, AGNO, final hedefi, not ve hatırlatma için **çevrimdışı** öğrenci asistanı. **React Native (Expo SDK 57)**. Tüm veriler telefonda **SQLite**’ta kalır — hesap yok, sunucu yok.
 
-Web karşılığı: [UniMan](https://github.com/KeremAKDOGAN81/UniMan)
-
 **Paket:** `com.kodlarinefendisi.uniman`
 
 ## Öne çıkanlar

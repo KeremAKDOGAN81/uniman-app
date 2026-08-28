@@ -4,8 +4,6 @@
 
 Offline-first student assistant for schedule, GPA, final targets, notes, and reminders. Built with **React Native (Expo SDK 57)**. All data stays on the device in **SQLite** — no account, no backend.
 
-Web counterpart: [UniMan](https://github.com/KeremAKDOGAN81/UniMan)
-
 **Package:** `com.kodlarinefendisi.uniman`
 
 ## Highlights
