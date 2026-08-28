@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -7,24 +7,34 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { SwipeTabShell } from '@/components/SwipeTabShell';
+import {
+  EduColorCard,
+  EduFormCard,
+  EduHeroBanner,
+  EduPageHeader,
+  EduSectionTitle,
+  EduSegmentPills,
+  EduStatTile,
+  eduGradients,
+} from '@/components/edu';
 import {
   Card,
-  Chip,
   EmptyState,
   Field,
   GhostButton,
   Muted,
   PrimaryButton,
   Screen,
-  Title,
   useColors,
 } from '@/components/ui';
 import { CountNumber } from '@/components/CountNumber';
 import { GradesPanel } from './grades';
 import { confirmDelete } from '@/lib/confirm';
+import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { calculateRequiredFinal, finalMessage } from '@/lib/finalGrade';
+import { statAgno, statLatestFinal } from '@/lib/copy';
 import { hapticSuccess, hapticWarning } from '@/lib/haptics';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -35,8 +45,18 @@ function parseNum(value: string, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function finalAccent(required: number, c: ReturnType<typeof useColors>): string {
+  if (required <= 0) return c.teal;
+  if (required > 100) return c.danger;
+  if (required > 75) return c.warning;
+  if (required > 50) return c.blue;
+  return c.success;
+}
+
 export default function CalculatorScreen() {
   const c = useColors();
+  const schedule = useAppStore((state) => state.schedule);
+  const courses = useAppStore((state) => state.courses);
   const examTargets = useAppStore((state) => state.examTargets);
   const addExamTarget = useAppStore((state) => state.addExamTarget);
   const updateExamTarget = useAppStore((state) => state.updateExamTarget);
@@ -69,6 +89,11 @@ export default function CalculatorScreen() {
     easy: c.success,
     passed: c.teal,
   }[resultTone];
+
+  const formAccent = name.trim() ? colorForCourseName(name, schedule) : c.success;
+
+  const finalStat = useMemo(() => statLatestFinal(examTargets), [examTargets]);
+  const agnoStat = useMemo(() => statAgno(courses), [courses]);
 
   const onAddExtra = () => {
     setExtras((rows) => [...rows, { id: String(Date.now()), score: '', weight: '' }]);
@@ -111,24 +136,72 @@ export default function CalculatorScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
+    <SwipeTabShell tab="calculator">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
-          <Title>Hesap</Title>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-            <Chip label="Final" selected={pane === 'final'} onPress={() => setPane('final')} />
-            <Chip label="AGNO" selected={pane === 'agno'} color={c.pink} onPress={() => setPane('agno')} />
+          <EduPageHeader
+            title="Hesap"
+            subtitle="Final hedefi ve dönem ortalamasını hesapla."
+            badge="Hesap"
+            accentColor={c.success}
+            emoji="🧮"
+          />
+
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>
+            <EduStatTile
+              label={finalStat.label}
+              value={finalStat.value}
+              hint={finalStat.hint}
+              gradient={eduGradients.mint}
+            />
+            <EduStatTile
+              label={agnoStat.label}
+              value={agnoStat.value}
+              hint={agnoStat.hint}
+              gradient={eduGradients.primary}
+            />
           </View>
+
+          <EduSegmentPills
+            options={[
+              { key: 'final', label: 'Final', color: c.success },
+              { key: 'agno', label: 'AGNO', color: c.pink },
+            ]}
+            value={pane}
+            onChange={(key) => setPane(key as 'final' | 'agno')}
+          />
+          <View style={{ height: 8 }} />
           {pane === 'agno' ? (
             <GradesPanel />
           ) : (
-          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
-            <Muted>
-              Web UniMan ile aynı mantık: vize + ek etkinlik yüzdeleri, kalan ağırlık final. Geçmek için finalden kaç
-              alman gerektiğini hesaplar.
-            </Muted>
+          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
+            {requiredFinal !== null && resultText ? (
+              <EduHeroBanner
+                badge="FİNAL HEDEFİ"
+                title={requiredFinal > 0 ? `${requiredFinal} puan` : 'Geçtin!'}
+                subtitle={resultText.split('\n')[0]}
+                footer={resultText.split('\n')[1]}
+                colors={
+                  resultTone === 'critical' || resultTone === 'hard'
+                    ? eduGradients.sunset
+                    : resultTone === 'passed'
+                      ? eduGradients.mint
+                      : eduGradients.sky
+                }
+              />
+            ) : (
+              <EduHeroBanner
+                badge="FİNAL HESABI"
+                title="Henüz hesaplanmadı"
+                subtitle="Vize notunu ve ağırlıkları gir, final hedefini gör."
+                colors={eduGradients.mint}
+              />
+            )}
 
-            <Card style={{ gap: 12 }}>
+            <EduFormCard
+              title={editingTargetId !== null ? 'Hesabı güncelle' : 'Final hesabı'}
+              accent={formAccent}
+              emoji={name.trim() ? emojiForCourse(name) : '🎯'}>
               <Field label="Dersin adı" value={name} onChangeText={setName} placeholder="Örn. Matematik" />
               <Field
                 label="Dersi geçme notu"
@@ -205,68 +278,66 @@ export default function CalculatorScreen() {
                 onPress={onCalculate}
               />
               {editingTargetId !== null ? <GhostButton label="Vazgeç" onPress={resetTargetForm} /> : null}
-            </Card>
+            </EduFormCard>
 
             {resultText && requiredFinal !== null ? (
-              <Card style={{ borderColor: toneColor, borderWidth: 2, gap: 8 }}>
+              <Card style={{ borderColor: toneColor, borderWidth: 2, gap: 8, borderRadius: 28 }}>
                 <Muted>Finalden alman gereken</Muted>
                 <CountNumber value={requiredFinal} color={toneColor} />
                 <Text style={{ color: toneColor, fontWeight: '700', fontSize: 16, lineHeight: 22 }}>{resultText}</Text>
               </Card>
             ) : null}
 
-            <Text style={{ color: c.text, fontSize: 18, fontWeight: '800', marginTop: 8 }}>Kaydedilen dersler</Text>
+            <EduSectionTitle title="Kaydedilen dersler" />
             {examTargets.length === 0 ? (
               <EmptyState
                 emoji="🎯"
-                title="Henüz hesap yok"
-                body="Vize + yüzdesi, istersen ek etkinlik. Hesapla deyince yıl içi puan ve final hedefi burada durur."
-                actionLabel="Örnek ders adı koy"
+                title="Kayıtlı final hesabı yok"
+                body="Vize, yüzde ve varsa ek etkinlikleri gir. Hesapla dediğinde sonuç burada saklanır."
+                actionLabel="Formu doldur"
                 onAction={() => setName('Veri Yapıları')}
               />
             ) : (
-              examTargets.map((item) => (
-                <Card key={item.id} style={{ gap: 4 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', flex: 1 }}>{item.name}</Text>
-                    <View
-                      style={{
-                        backgroundColor: item.requiredFinal > 100 ? c.danger : item.requiredFinal > 75 ? c.warning : c.success,
-                        borderRadius: 12,
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                      }}>
-                      <Text style={{ color: '#fff', fontWeight: '800' }}>
-                        {item.requiredFinal > 0 ? item.requiredFinal : 'Geçti'}
-                      </Text>
+              examTargets.map((item) => {
+                const accent = finalAccent(item.requiredFinal, c);
+                const badge =
+                  item.requiredFinal <= 0
+                    ? 'Geçiyorsun'
+                    : `Final: ${item.requiredFinal} puan`;
+                return (
+                  <EduColorCard
+                    key={item.id}
+                    accent={accent}
+                    emoji="🎯"
+                    badge={badge}
+                    title={item.name}
+                    subtitle={`Yıl içi ortalama: ${item.yearPoints} puan`}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <GhostButton
+                        label="Düzenle"
+                        onPress={() => {
+                          setEditingTargetId(item.id);
+                          setName(item.name);
+                          setResultText(null);
+                          setRequiredFinal(null);
+                        }}
+                      />
+                      <GhostButton
+                        label="Sil"
+                        danger
+                        onPress={() =>
+                          confirmDelete('Hesap silinsin mi?', item.name, () => removeExamTarget(item.id))
+                        }
+                      />
                     </View>
-                  </View>
-                  <Muted>Yıl içi puanı: {item.yearPoints}</Muted>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <GhostButton
-                      label="Düzenle"
-                      onPress={() => {
-                        setEditingTargetId(item.id);
-                        setName(item.name);
-                        setResultText(null);
-                        setRequiredFinal(null);
-                      }}
-                    />
-                    <GhostButton
-                      label="Sil"
-                      danger
-                      onPress={() =>
-                        confirmDelete('Hesap silinsin mi?', item.name, () => removeExamTarget(item.id))
-                      }
-                    />
-                  </View>
-                </Card>
-              ))
+                  </EduColorCard>
+                );
+              })
             )}
           </ScrollView>
           )}
         </Screen>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SwipeTabShell>
   );
 }

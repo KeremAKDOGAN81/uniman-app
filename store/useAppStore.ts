@@ -15,7 +15,9 @@ import {
   getReminders,
   getSchedule,
   getThemeSetting,
+  getIntroDone,
   getOnboardingDone,
+  getUserProfile,
   initDb,
   insertAttendance,
   insertAttendanceFull,
@@ -24,7 +26,9 @@ import {
   insertNote,
   insertReminder,
   insertScheduleItem,
+  setIntroDone,
   setOnboardingDone,
+  setUserProfile,
   setReminderDone,
   setSetting,
   updateAttendance as updateAttendanceRow,
@@ -38,6 +42,9 @@ import {
   updateScheduleReminder,
   wipeUserTables,
 } from '@/lib/database';
+import { isProfileComplete } from '@/lib/profile';
+import { colorForCourseName } from '@/lib/courseColor';
+import { hasAttendanceForName, hasGradeForName } from '@/lib/courseCatalog';
 import { letterFromScore } from '@/lib/gpa';
 import {
   cancelReminderNotification,
@@ -55,6 +62,7 @@ import type {
   ReminderKind,
   ScheduleItem,
   ThemeName,
+  UserProfile,
   Weekday,
 } from '@/lib/types';
 
@@ -62,6 +70,9 @@ type AppState = {
   ready: boolean;
   theme: ThemeName;
   onboardingDone: boolean;
+  introDone: boolean;
+  profile: UserProfile | null;
+  profileComplete: boolean;
   courses: Course[];
   schedule: ScheduleItem[];
   reminders: Reminder[];
@@ -71,6 +82,8 @@ type AppState = {
   hydrate: () => Promise<void>;
   setTheme: (theme: ThemeName) => Promise<void>;
   toggleTheme: () => Promise<void>;
+  completeIntro: () => Promise<void>;
+  saveProfile: (input: UserProfile) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   addCourse: (input: {
     name: string;
@@ -136,14 +149,16 @@ type AppState = {
   updateAttendance: (id: number, input: { name: string; limit: number }) => Promise<void>;
   bumpAttendance: (id: number, delta: number) => Promise<void>;
   removeAttendance: (id: number) => Promise<void>;
-  addNote: (input: { title: string; body: string }) => Promise<void>;
-  updateNote: (id: number, input: { title: string; body: string }) => Promise<void>;
+  addNote: (input: { title: string; body: string; courseName?: string }) => Promise<void>;
+  updateNote: (id: number, input: { title: string; body: string; courseName?: string }) => Promise<void>;
   removeNote: (id: number) => Promise<void>;
+  ensureAttendanceForCourse: (name: string, limit?: number) => Promise<void>;
+  ensureGradeForCourse: (name: string, ects?: number) => Promise<void>;
   importBackup: (raw: string) => Promise<void>;
 };
 
 async function loadAll() {
-  const [courses, schedule, reminders, examTargets, attendance, notes, theme, onboardingDone] =
+  const [courses, schedule, reminders, examTargets, attendance, notes, theme, onboardingDone, introDone, profile] =
     await Promise.all([
       getCourses(),
       getSchedule(),
@@ -153,14 +168,32 @@ async function loadAll() {
       getNotes(),
       getThemeSetting(),
       getOnboardingDone(),
+      getIntroDone(),
+      getUserProfile(),
     ]);
-  return { courses, schedule, reminders, examTargets, attendance, notes, theme, onboardingDone };
+  const profileComplete = isProfileComplete(profile);
+  return {
+    courses,
+    schedule,
+    reminders,
+    examTargets,
+    attendance,
+    notes,
+    theme,
+    onboardingDone: onboardingDone && profileComplete,
+    introDone: introDone || onboardingDone,
+    profile,
+    profileComplete,
+  };
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   ready: false,
   theme: 'light',
   onboardingDone: false,
+  introDone: false,
+  profile: null,
+  profileComplete: false,
   courses: [],
   schedule: [],
   reminders: [],
@@ -181,6 +214,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   toggleTheme: async () => {
     const next = get().theme === 'light' ? 'dark' : 'light';
     await get().setTheme(next);
+  },
+
+  completeIntro: async () => {
+    await setIntroDone(true);
+    set({ introDone: true });
+  },
+
+  saveProfile: async (input) => {
+    const profile: UserProfile = {
+      firstName: input.firstName.trim(),
+      lastName: input.lastName.trim(),
+      department: input.department.trim(),
+      university: input.university.trim(),
+      year: input.year.trim(),
+    };
+    await setUserProfile(profile);
+    await setOnboardingDone(true);
+    set({ profile, profileComplete: isProfileComplete(profile), onboardingDone: true });
   },
 
   completeOnboarding: async () => {
@@ -227,8 +278,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         room: input.room,
       });
     }
+    const color = colorForCourseName(input.title, get().schedule);
     const item = await insertScheduleItem({
       ...input,
+      color,
       remindHours,
       notificationId,
     });
@@ -262,7 +315,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         room: input.room,
       });
     }
-    const color = input.color ?? current.color;
+    const color = colorForCourseName(
+      input.title,
+      get().schedule.filter((item) => item.id !== id)
+    );
     await updateScheduleItemRow(id, {
       weekday: input.weekday,
       title: input.title,
@@ -478,7 +534,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     await updateNoteRow(id, input);
     set({
       notes: get().notes.map((note) =>
-        note.id === id ? { ...note, title: input.title, body: input.body } : note
+        note.id === id
+          ? {
+              ...note,
+              title: input.title,
+              body: input.body,
+              courseName: input.courseName?.trim() ?? note.courseName,
+            }
+          : note
       ),
     });
   },
@@ -486,6 +549,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeNote: async (id) => {
     await deleteNote(id);
     set({ notes: get().notes.filter((note) => note.id !== id) });
+  },
+
+  ensureAttendanceForCourse: async (name, limit = 4) => {
+    const trimmed = name.trim();
+    if (!trimmed || hasAttendanceForName(trimmed, get().attendance)) return;
+    await get().addAttendance({ name: trimmed, limit });
+  },
+
+  ensureGradeForCourse: async (name, ects = 5) => {
+    const trimmed = name.trim();
+    if (!trimmed || hasGradeForName(trimmed, get().courses)) return;
+    await get().addCourse({ name: trimmed, ects });
   },
 
   importBackup: async (raw) => {
@@ -498,6 +573,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     await wipeUserTables();
     await setSetting('theme', data.theme);
+
+    if (data.profile && isProfileComplete(data.profile)) {
+      await setUserProfile(data.profile);
+      await setOnboardingDone(true);
+    }
 
     for (const course of data.courses) {
       await insertCourse({
@@ -530,7 +610,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         room: item.room ?? '',
         remindHours: hours,
         notificationId,
-        color: item.color || '#4F46E5',
+        color: colorForCourseName(item.title, data.schedule),
       });
     }
     for (const target of data.examTargets) {
@@ -548,7 +628,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     }
     for (const note of data.notes) {
-      await insertNote({ title: note.title, body: note.body });
+      await insertNote({
+        title: note.title,
+        body: note.body,
+        courseName: note.courseName ?? '',
+      });
     }
     for (const reminder of data.reminders) {
       const dueAt = new Date(reminder.dueAt);

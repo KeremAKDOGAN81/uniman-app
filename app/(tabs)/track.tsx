@@ -1,10 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DateTimePicker } from '@/components/DateTimePicker';
+import { CourseChipRow } from '@/components/CourseChipRow';
+import { SwipeTabShell } from '@/components/SwipeTabShell';
 import {
-  Card,
+  EduColorCard,
+  EduFormCard,
+  EduHeroBanner,
+  EduPageHeader,
+  EduProgressCard,
+  EduSectionTitle,
+  EduSegmentPills,
+  EduStatTile,
+  eduGradients,
+} from '@/components/edu';
+import {
   Chip,
   EmptyState,
   Field,
@@ -12,11 +23,14 @@ import {
   Muted,
   PrimaryButton,
   Screen,
-  Title,
   useColors,
 } from '@/components/ui';
 import { confirmDelete } from '@/lib/confirm';
+import { collectCourseNames } from '@/lib/courseCatalog';
+import { attendanceSubtitle, statAttendanceWarnings, statOpenReminders } from '@/lib/copy';
+import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { formatCountdown, formatDateTime, isUpcoming, parseLocalDateTime, toDateInput } from '@/lib/dates';
+import { findNextExam } from '@/lib/homeInsights';
 import { hapticSuccess } from '@/lib/haptics';
 import type { ReminderKind } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -32,29 +46,39 @@ export default function TrackScreen() {
   const reminders = useAppStore((state) => state.reminders);
   const courses = useAppStore((state) => state.courses);
   const schedule = useAppStore((state) => state.schedule);
+  const attendance = useAppStore((state) => state.attendance);
+  const examTargets = useAppStore((state) => state.examTargets);
+  const notes = useAppStore((state) => state.notes);
   const addReminder = useAppStore((state) => state.addReminder);
   const updateReminder = useAppStore((state) => state.updateReminder);
   const toggleReminder = useAppStore((state) => state.toggleReminder);
   const removeReminder = useAppStore((state) => state.removeReminder);
-  const attendance = useAppStore((state) => state.attendance);
   const addAttendance = useAppStore((state) => state.addAttendance);
   const updateAttendance = useAppStore((state) => state.updateAttendance);
   const bumpAttendance = useAppStore((state) => state.bumpAttendance);
   const removeAttendance = useAppStore((state) => state.removeAttendance);
   const now = useClock(15000);
 
-  const courseSuggestions = useMemo(() => {
-    const names = new Set<string>();
-    for (const course of courses) {
-      const name = course.name.trim();
-      if (name) names.add(name);
-    }
-    for (const item of schedule) {
-      const title = item.title.trim();
-      if (title) names.add(title);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [courses, schedule]);
+  const courseSuggestions = useMemo(
+    () => collectCourseNames({ courses, schedule, attendance, examTargets, notes, reminders }),
+    [courses, schedule, attendance, examTargets, notes, reminders]
+  );
+
+  const openReminders = useMemo(
+    () => reminders.filter((item) => !item.done && isUpcoming(item.dueAt)),
+    [reminders]
+  );
+  const attendanceWarnings = useMemo(
+    () => attendance.filter((item) => item.used / item.limit >= 0.75).length,
+    [attendance]
+  );
+
+  const nextExam = useMemo(() => findNextExam(reminders, now), [reminders, now]);
+  const reminderStat = useMemo(() => statOpenReminders(openReminders.length), [openReminders.length]);
+  const attendanceStat = useMemo(
+    () => statAttendanceWarnings(attendanceWarnings),
+    [attendanceWarnings]
+  );
 
   const filteredReminders = useMemo(() => {
     return reminders.filter((item) => {
@@ -74,6 +98,9 @@ export default function TrackScreen() {
   const [editingAttendanceId, setEditingAttendanceId] = useState<number | null>(null);
   const [courseName, setCourseName] = useState('');
   const [limit, setLimit] = useState('4');
+
+  const kindAccent = kind === 'sinav' ? c.warning : c.blue;
+  const kindEmoji = kind === 'sinav' ? '🎯' : '📋';
 
   const resetReminderForm = () => {
     setEditingReminderId(null);
@@ -135,28 +162,57 @@ export default function TrackScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
+    <SwipeTabShell tab="track">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
-          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
-            <Title>Takip</Title>
-            <Muted>Sınav/ödev hatırlatması ve devamsızlık. Ders notları için Notlar sekmesi.</Muted>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              <Chip label="Hatırlatma" selected={tab === 'hatirlatma'} onPress={() => setTab('hatirlatma')} />
-              <Chip
-                label="Devamsızlık"
-                selected={tab === 'devamsizlik'}
-                color={c.orange}
-                onPress={() => setTab('devamsizlik')}
+          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
+            <EduPageHeader
+              title="Takip"
+              subtitle="Sınav, ödev hatırlatmaları ve devamsızlık."
+              badge="Track"
+              accentColor={c.warning}
+              emoji="🔔"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <EduStatTile
+                label={reminderStat.label}
+                value={reminderStat.value}
+                hint={reminderStat.hint}
+                gradient={eduGradients.sunset}
               />
-            </ScrollView>
+              <EduStatTile
+                label={attendanceStat.label}
+                value={attendanceStat.value}
+                hint={attendanceStat.hint}
+                gradient={attendanceWarnings > 0 ? (['#EF4444', '#F97316'] as const) : eduGradients.mint}
+              />
+            </View>
+
+            {tab === 'hatirlatma' && nextExam ? (
+              <EduHeroBanner
+                badge="SIRADAKİ SINAV"
+                title={nextExam.title}
+                subtitle={`${nextExam.countdown} · ${nextExam.dateLabel}`}
+                colors={eduGradients.sunset}
+              />
+            ) : null}
+
+            <EduSegmentPills
+              options={[
+                { key: 'hatirlatma', label: 'Hatırlatma', color: c.warning },
+                { key: 'devamsizlik', label: 'Devamsızlık', color: c.danger },
+              ]}
+              value={tab}
+              onChange={(key) => setTab(key as 'hatirlatma' | 'devamsizlik')}
+            />
 
             {tab === 'hatirlatma' ? (
               <>
-                <Card style={{ gap: 12 }}>
-                  <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>
-                    {editingReminderId !== null ? 'Hatırlatmayı düzenle' : 'Yeni hatırlatma'}
-                  </Text>
+                <EduFormCard
+                  title={editingReminderId !== null ? 'Hatırlatmayı düzenle' : 'Yeni hatırlatma'}
+                  accent={kindAccent}
+                  emoji={kindEmoji}>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <Chip label="Sınav" selected={kind === 'sinav'} color={c.warning} onPress={() => setKind('sinav')} />
                     <Chip label="Ödev" selected={kind === 'odev'} color={c.blue} onPress={() => setKind('odev')} />
@@ -168,16 +224,7 @@ export default function TrackScreen() {
                     placeholder={kind === 'sinav' ? 'Matematik vize' : 'Proje teslimi'}
                   />
                   {courseSuggestions.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                      {courseSuggestions.map((suggestion) => (
-                        <Chip
-                          key={suggestion}
-                          label={suggestion}
-                          selected={title === suggestion}
-                          onPress={() => setTitle(suggestion)}
-                        />
-                      ))}
-                    </ScrollView>
+                    <CourseChipRow names={courseSuggestions} selected={title} onSelect={setTitle} />
                   ) : null}
                   <DateTimePicker
                     date={date}
@@ -194,124 +241,88 @@ export default function TrackScreen() {
                   {editingReminderId !== null ? (
                     <GhostButton label="Vazgeç" onPress={resetReminderForm} />
                   ) : null}
-                </Card>
+                </EduFormCard>
+
                 {reminders.length === 0 ? (
                   <EmptyState
                     emoji="🔔"
-                    title="İlk hatırlatmanı kur"
-                    body="Sınav mı ödev mi seç, Bugün/Yarın’a dokun, saati seç. Bildirim iznini bir kez onayla."
-                    actionLabel="Örnek başlık koy"
+                    title="Hatırlatma yok"
+                    body="Sınav veya ödev tarihi ekle; zamanı gelince bildirim alırsın."
+                    actionLabel="Hatırlatma oluştur"
                     onAction={() => setTitle(kind === 'sinav' ? 'Matematik vize' : 'Proje teslimi')}
                   />
                 ) : (
                   <>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                      <Chip
-                        label="Açık"
-                        selected={reminderFilter === 'open'}
-                        onPress={() => setReminderFilter('open')}
-                      />
-                      <Chip
-                        label="Geçmiş"
-                        selected={reminderFilter === 'past'}
-                        color={c.warning}
-                        onPress={() => setReminderFilter('past')}
-                      />
-                      <Chip
-                        label="Tamamlanan"
-                        selected={reminderFilter === 'done'}
-                        color={c.success}
-                        onPress={() => setReminderFilter('done')}
-                      />
-                      <Chip
-                        label="Tümü"
-                        selected={reminderFilter === 'all'}
-                        color={c.blue}
-                        onPress={() => setReminderFilter('all')}
-                      />
+                      <Chip label="Açık" selected={reminderFilter === 'open'} color={c.warning} onPress={() => setReminderFilter('open')} />
+                      <Chip label="Geçmiş" selected={reminderFilter === 'past'} color={c.pink} onPress={() => setReminderFilter('past')} />
+                      <Chip label="Tamamlanan" selected={reminderFilter === 'done'} color={c.success} onPress={() => setReminderFilter('done')} />
+                      <Chip label="Tümü" selected={reminderFilter === 'all'} color={c.blue} onPress={() => setReminderFilter('all')} />
                     </ScrollView>
+
                     {filteredReminders.length === 0 ? (
-                      <EmptyState
-                        emoji="🔎"
-                        title="Bu filtrede kayıt yok"
-                        body="Başka bir filtre dene veya yeni hatırlatma ekle."
-                      />
+                      <EmptyState emoji="🔎" title="Bu filtrede kayıt yok" body="Başka bir filtre dene veya yeni hatırlatma ekle." />
                     ) : (
-                      filteredReminders.map((item) => (
-                        <Card key={item.id} style={{ gap: 6, opacity: item.done ? 0.55 : 1 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                            <Text style={{ color: c.accent, fontWeight: '800', fontSize: 12 }}>
-                              {item.kind === 'sinav' ? 'SINAV' : 'ÖDEV'}
-                            </Text>
-                            <Muted>
-                              {formatDateTime(item.dueAt)} · {formatCountdown(item.dueAt, now)}
-                            </Muted>
-                          </View>
-                          <Text
-                            style={{
-                              color: c.text,
-                              fontSize: 17,
-                              fontWeight: '800',
-                              textDecorationLine: item.done ? 'line-through' : 'none',
-                            }}>
-                            {item.title}
-                          </Text>
-                          {!item.done && !isUpcoming(item.dueAt) ? <Muted>Zamanı geçti</Muted> : null}
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                            <GhostButton
-                              label={item.done ? 'Geri al' : 'Tamamlandı'}
-                              onPress={() => {
-                                hapticSuccess();
-                                toggleReminder(item.id);
-                              }}
-                            />
-                            <GhostButton
-                              label="Düzenle"
-                              onPress={() => {
-                                const due = new Date(item.dueAt);
-                                setEditingReminderId(item.id);
-                                setTitle(item.title);
-                                setKind(item.kind);
-                                setDate(toDateInput(due));
-                                setTime(
-                                  `${String(due.getHours()).padStart(2, '0')}:${String(due.getMinutes()).padStart(2, '0')}`
-                                );
-                              }}
-                            />
-                            <GhostButton
-                              label="Sil"
-                              danger
-                              onPress={() =>
-                                confirmDelete('Hatırlatma silinsin mi?', item.title, () =>
-                                  removeReminder(item.id)
-                                )
-                              }
-                            />
-                          </View>
-                        </Card>
-                      ))
+                      filteredReminders.map((item) => {
+                        const accent = item.kind === 'sinav' ? c.warning : c.blue;
+                        const emoji = item.kind === 'sinav' ? '🎯' : '📋';
+                        return (
+                          <EduColorCard
+                            key={item.id}
+                            accent={accent}
+                            emoji={emoji}
+                            badge={item.kind === 'sinav' ? 'SINAV' : 'ÖDEV'}
+                            title={item.title}
+                            subtitle={`${formatDateTime(item.dueAt)} · ${formatCountdown(item.dueAt, now)}`}
+                            faded={item.done}>
+                            {!item.done && !isUpcoming(item.dueAt) ? <Muted>Zamanı geçti</Muted> : null}
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                              <GhostButton
+                                label={item.done ? 'Geri al' : 'Tamamlandı'}
+                                onPress={() => {
+                                  hapticSuccess();
+                                  toggleReminder(item.id);
+                                }}
+                              />
+                              <GhostButton
+                                label="Düzenle"
+                                onPress={() => {
+                                  const due = new Date(item.dueAt);
+                                  setEditingReminderId(item.id);
+                                  setTitle(item.title);
+                                  setKind(item.kind);
+                                  setDate(toDateInput(due));
+                                  setTime(
+                                    `${String(due.getHours()).padStart(2, '0')}:${String(due.getMinutes()).padStart(2, '0')}`
+                                  );
+                                }}
+                              />
+                              <GhostButton
+                                label="Sil"
+                                danger
+                                onPress={() =>
+                                  confirmDelete('Hatırlatma silinsin mi?', item.title, () =>
+                                    removeReminder(item.id)
+                                  )
+                                }
+                              />
+                            </View>
+                          </EduColorCard>
+                        );
+                      })
                     )}
                   </>
                 )}
               </>
             ) : (
               <>
-                <Card style={{ gap: 12 }}>
-                  <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>
-                    {editingAttendanceId !== null ? 'Dersi düzenle' : 'Ders ekle'}
-                  </Text>
+                <EduFormCard
+                  title={editingAttendanceId !== null ? 'Dersi düzenle' : 'Devamsızlık takibi'}
+                  accent={c.danger}
+                  emoji="📉">
                   <Field label="Dersin adı" value={courseName} onChangeText={setCourseName} placeholder="Algoritma" />
                   {courseSuggestions.length > 0 ? (
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                      {courseSuggestions.map((suggestion) => (
-                        <Chip
-                          key={suggestion}
-                          label={suggestion}
-                          selected={courseName === suggestion}
-                          onPress={() => setCourseName(suggestion)}
-                        />
-                      ))}
-                    </ScrollView>
+                    <CourseChipRow names={courseSuggestions} selected={courseName} onSelect={setCourseName} />
                   ) : null}
                   <Field
                     label="Maksimum hak"
@@ -327,67 +338,66 @@ export default function TrackScreen() {
                   {editingAttendanceId !== null ? (
                     <GhostButton label="Vazgeç" onPress={resetAttendanceForm} />
                   ) : null}
-                </Card>
+                </EduFormCard>
+
                 {attendance.length === 0 ? (
                   <EmptyState
                     emoji="📉"
-                    title="Hangi derste hakkın bitiyor?"
-                    body="Ders adı + maksimum hak (çoğu bölümde 4). Derse girmedin mi + bas. %75’te ana sayfa uyarır."
-                    actionLabel="Örnek ders koy"
+                    title="Devamsızlık takibi yok"
+                    body="Ders adı ve maksimum hak gir. %75 dolunca ana sayfada uyarı görünür."
+                    actionLabel="Ders ekle"
                     onAction={() => {
                       setCourseName('Algoritma');
                       setLimit('4');
                     }}
                   />
                 ) : (
-                  attendance.map((item) => {
-                    const ratio = item.limit === 0 ? 0 : Math.min(1, item.used / item.limit);
-                    const bar = ratio >= 0.8 ? c.danger : ratio >= 0.5 ? c.warning : c.success;
-                    return (
-                      <Card key={item.id} style={{ gap: 8 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                          <Text style={{ color: c.text, fontWeight: '800', fontSize: 16, flex: 1 }}>{item.name}</Text>
-                          <Muted>
-                            {item.used}/{item.limit}
-                          </Muted>
-                        </View>
-                        <Muted>
-                          Kullanılan: {item.used} / {item.limit}
-                          {item.used >= item.limit ? ' · sınır doldu' : ''}
-                        </Muted>
-                        <View style={{ height: 10, backgroundColor: c.line, borderRadius: 99, overflow: 'hidden' }}>
-                          <View style={{ width: `${ratio * 100}%`, height: 10, backgroundColor: bar }} />
-                        </View>
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                          <GhostButton label="+ Devamsızlık" onPress={() => bumpAttendance(item.id, 1)} />
-                          <GhostButton label="− Düzelt" onPress={() => bumpAttendance(item.id, -1)} />
-                          <GhostButton
-                            label="Düzenle"
-                            onPress={() => {
-                              setEditingAttendanceId(item.id);
-                              setCourseName(item.name);
-                              setLimit(String(item.limit));
-                            }}
-                          />
-                          <GhostButton
-                            label="Sil"
-                            danger
-                            onPress={() =>
-                              confirmDelete('Devamsızlık kaydı silinsin mi?', item.name, () =>
-                                removeAttendance(item.id)
-                              )
-                            }
-                          />
-                        </View>
-                      </Card>
-                    );
-                  })
+                  <>
+                    <EduSectionTitle title="Devamsızlık listesi" />
+                    {attendance.map((item) => {
+                      const ratio = item.limit === 0 ? 0 : Math.min(1, item.used / item.limit);
+                      const bar = ratio >= 0.8 ? c.danger : ratio >= 0.5 ? c.warning : c.success;
+                      const accent = colorForCourseName(item.name, schedule);
+                      return (
+                        <EduProgressCard
+                          key={item.id}
+                          accent={accent}
+                          emoji={emojiForCourse(item.name)}
+                          title={item.name}
+                          subtitle={attendanceSubtitle(item.used, item.limit)}
+                          ratio={ratio}
+                          progressColor={bar}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                            <GhostButton label="+ Devamsızlık" onPress={() => bumpAttendance(item.id, 1)} />
+                            <GhostButton label="− Düzelt" onPress={() => bumpAttendance(item.id, -1)} />
+                            <GhostButton
+                              label="Düzenle"
+                              onPress={() => {
+                                setEditingAttendanceId(item.id);
+                                setCourseName(item.name);
+                                setLimit(String(item.limit));
+                              }}
+                            />
+                            <GhostButton
+                              label="Sil"
+                              danger
+                              onPress={() =>
+                                confirmDelete('Devamsızlık kaydı silinsin mi?', item.name, () =>
+                                  removeAttendance(item.id)
+                                )
+                              }
+                            />
+                          </View>
+                        </EduProgressCard>
+                      );
+                    })}
+                  </>
                 )}
               </>
             )}
           </ScrollView>
         </Screen>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SwipeTabShell>
   );
 }

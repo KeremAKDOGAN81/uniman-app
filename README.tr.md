@@ -2,31 +2,49 @@
 
 [English](README.md)
 
-Öğrenci not, GPA, ders programı, not ve hatırlatma uygulaması. React Native (Expo SDK 57). Veriler telefonda SQLite’ta kalır; backend yoktur.
+Program, AGNO, final hedefi, not ve hatırlatma için **çevrimdışı** öğrenci asistanı. **React Native (Expo SDK 57)**. Tüm veriler telefonda **SQLite**’ta kalır — hesap yok, sunucu yok.
 
 Web karşılığı: [UniMan](https://github.com/KeremAKDOGAN81/UniMan)
 
 **Paket:** `com.kodlarinefendisi.uniman`
 
-## Ne var?
+## Öne çıkanlar
 
-- **Ana sayfa** — bugünün dersleri (şimdi / sıradaki), sınav geri sayımı, GPA özeti, JSON yedek.
-- **Hesap** — vize + istenen sayıda ek etkinlik (yüzde ile). Finalden kaç alman gerektiği web UniMan ile aynı formülle hesaplanır. AGNO aynı sekmede ikinci panel: AKTS × harf katsayısı, 4.00 ve 100’lük.
-- **Program** — Pazartesi–Cuma saatlik dersler. İsteğe bağlı yerel bildirim: dersten 1 / 2 / 3 saat önce (her hafta tekrarlar).
-- **Notlar** — kısa notlar; programdan derse göre başlık gelir. Başlık veya içerikte arama.
-- **Takip** — sınav/ödev yerel bildirimi ve devamsızlık.
-- Açık renkli tema varsayılan; koyu temaya geçilebilir, kayıtlı kalır.
+- **Renkli Edu arayüz** — oval kartlar, gradientler, derse göre otomatik renk atama.
+- **Kaydırmalı sekmeler** — beş ana ekran; yatay kaydırma veya üst oklarla geçiş (alt tab bar yok).
+- **İlk açılış** — kısa tanıtım, ardından profil (ad, soyad, bölüm; isteğe bağlı üniversite/sınıf). Profil kaydedilmeden uygulama açılmaz.
+- **Gizlilik** — veriler telefondan çıkmaz; yalnızca JSON yedek dışa aktarırsan paylaşırsın.
+
+## Sekmeler
+
+| Sekme | Ne işe yarar? |
+|-------|----------------|
+| **Ana sayfa** | İsimle selamlama, sıradaki sınav, bugünkü dersler, haftalık özet, **Derslerim**, AGNO ve açık hatırlatmalar. |
+| **Program** | Pazartesi–Cuma programı, dersten 1 / 2 / 3 saat önce bildirim, haftayı metin olarak paylaş, dersi AGNO/devamsızlığa bağla. |
+| **Hesap** | **Final:** vize + ağırlıklı etkinliklerden gerekli final notu. **AGNO:** dönem ortalaması (4.00 ve 100’lük). Üst kartlar son değeri veya *Hesaplanmadı* gösterir. |
+| **Notlar** | Derse etiketli notlar, arama ve derse göre filtre; programdan derse dokunarak açılabilir. |
+| **Takip** | Sınav/ödev hatırlatmaları (yerel bildirim) ve devamsızlık limiti takibi. |
+
+## Ders birleştirme
+
+Program, AGNO, devamsızlık, notlar ve final hesapları aynı ders kataloğunu kullanır (`lib/courseCatalog.ts`). Derse ekleme sonrası AGNO veya devamsızlığa bağlama önerilir; formlarda mevcut ders adları chip olarak çıkar.
 
 ## Mimari
 
 ```
-Ekranlar (Expo Router)
-  → Zustand
+Expo Router ekranları
+  → Zustand (useAppStore)
   → expo-sqlite (uniman.db)
-  → expo-notifications (yerel)
+  → expo-notifications (yalnızca yerel)
 ```
 
-İş kuralları `lib/finalGrade.ts` ve `lib/gpa.ts` içinde; UI’dan ayrı durur.
+İş kuralları: `lib/gpa.ts`, `lib/finalGrade.ts`, `lib/homeInsights.ts`, `lib/copy.ts`, `lib/profile.ts`, `lib/shareSchedule.ts`.
+
+Arayüz: `components/edu.tsx`, `components/SwipeTabShell.tsx`.
+
+## Yedek
+
+Ayarlar → JSON dışa aktar (dersler, program, hatırlatmalar, notlar, profil, tema). İçe aktarma onaydan sonra cihaz verisini değiştirir.
 
 ## Çalıştırma
 
@@ -37,20 +55,25 @@ npm install
 npx expo run:android
 ```
 
-Günlük JS:
+Günlük geliştirme:
 
 ```bash
-npx expo start --dev-client
+npm start
+# veya: npx expo start --dev-client
 ```
 
-Native paket eklenince `run:android` tekrar gerekir.
+Yeni native paket eklenince `run:android` tekrar gerekir.
 
 ## Telefona APK
 
-Windows `.exe` değil. Android’e `.apk` kurulur. EAS:
+EAS ile preview `.apk` (Windows `.exe` değil):
 
 ```bash
 npx eas-cli build --platform android --profile preview
 ```
 
 Derleme bitince Expo sayfasından APK’yı indir, telefona at, kur (gerekirse bilinmeyen kaynaklara izin ver). iPhone bu APK’yı kuramaz.
+
+## Dokümantasyon
+
+Expo SDK: [docs.expo.dev v57](https://docs.expo.dev/versions/v57.0.0/)

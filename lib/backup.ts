@@ -6,6 +6,7 @@ import type {
   Reminder,
   ScheduleItem,
   ThemeName,
+  UserProfile,
 } from '@/lib/types';
 
 export const BACKUP_VERSION = 1;
@@ -14,6 +15,7 @@ export type UniManBackup = {
   version: number;
   exportedAt: string;
   theme: ThemeName;
+  profile?: UserProfile | null;
   courses: Course[];
   schedule: ScheduleItem[];
   reminders: Reminder[];
@@ -43,6 +45,7 @@ export function parseBackup(raw: string): UniManBackup {
     version: BACKUP_VERSION,
     exportedAt: parsed.exportedAt ?? new Date().toISOString(),
     theme: parsed.theme === 'dark' ? 'dark' : 'light',
+    profile: parsed.profile ?? null,
     courses: parsed.courses,
     schedule: parsed.schedule,
     reminders: parsed.reminders ?? [],

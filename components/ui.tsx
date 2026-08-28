@@ -20,6 +20,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { palettes, type ThemeColors } from '@/constants/theme';
+import { eduCardShadow } from '@/lib/courseColor';
 import { hapticSelect } from '@/lib/haptics';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -56,10 +57,11 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
       style={[
         {
           backgroundColor: c.card,
-          borderRadius: 18,
+          borderRadius: 28,
           padding: 16,
           borderWidth: 1,
           borderColor: c.line,
+          ...eduCardShadow,
         },
         style,
       ]}>
@@ -113,8 +115,8 @@ export function PrimaryButton({
         style={[
           {
             backgroundColor: c.accent,
-            borderRadius: 14,
-            paddingVertical: 14,
+            borderRadius: 16,
+            paddingVertical: 15,
             alignItems: 'center',
             opacity: disabled ? 0.45 : 1,
           },

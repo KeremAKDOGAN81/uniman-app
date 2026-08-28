@@ -16,7 +16,8 @@ export function formatLongDate(date = new Date()): string {
 }
 
 export function padTime(value: string): string {
-  const [h = '00', m = '00'] = value.split(':');
+  const normalized = value.trim().replace(/[.,]/g, ':');
+  const [h = '00', m = '00'] = normalized.split(':');
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 }
 

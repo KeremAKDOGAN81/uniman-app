@@ -11,8 +11,10 @@ import type {
   ReminderKind,
   ScheduleItem,
   ThemeName,
+  UserProfile,
   Weekday,
 } from '@/lib/types';
+import { COURSE_COLORS } from '@/lib/types';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -105,6 +107,15 @@ export async function initDb(): Promise<void> {
     );
   `);
   await migrateScheduleColumns(database);
+  await migrateNotesColumns(database);
+}
+
+async function migrateNotesColumns(database: SQLite.SQLiteDatabase): Promise<void> {
+  const info = await database.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  const names = new Set(info.map((col) => col.name));
+  if (!names.has('course_name')) {
+    await database.execAsync("ALTER TABLE notes ADD COLUMN course_name TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 async function migrateScheduleColumns(database: SQLite.SQLiteDatabase): Promise<void> {
@@ -186,7 +197,7 @@ export async function getSchedule(): Promise<ScheduleItem[]> {
       ? (row.remind_hours ?? 0)
       : 0) as ScheduleItem['remindHours'],
     notificationId: row.notification_id ?? null,
-    color: row.color || '#4F46E5',
+    color: row.color || COURSE_COLORS[0],
   }));
 }
 
@@ -202,7 +213,7 @@ export async function insertScheduleItem(input: {
 }): Promise<ScheduleItem> {
   const remindHours = input.remindHours ?? 0;
   const notificationId = input.notificationId ?? null;
-  const color = input.color || '#4F46E5';
+  const color = input.color || COURSE_COLORS[0];
   const result = await getDb().runAsync(
     'INSERT INTO schedule (weekday, title, start_time, end_time, room, remind_hours, notification_id, color) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     input.weekday,
@@ -431,27 +442,32 @@ export async function getNotes(): Promise<Note[]> {
     title: string;
     body: string;
     created_at: string;
+    course_name?: string | null;
   }>('SELECT * FROM notes ORDER BY id DESC');
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
     body: row.body,
+    courseName: row.course_name ?? '',
     createdAt: row.created_at,
   }));
 }
 
-export async function insertNote(input: { title: string; body: string }): Promise<Note> {
+export async function insertNote(input: { title: string; body: string; courseName?: string }): Promise<Note> {
   const createdAt = new Date().toISOString();
+  const courseName = input.courseName?.trim() ?? '';
   const result = await getDb().runAsync(
-    'INSERT INTO notes (title, body, created_at) VALUES (?, ?, ?)',
+    'INSERT INTO notes (title, body, course_name, created_at) VALUES (?, ?, ?, ?)',
     input.title,
     input.body,
+    courseName,
     createdAt
   );
   return {
     id: Number(result.lastInsertRowId),
     title: input.title,
     body: input.body,
+    courseName,
     createdAt,
   };
 }
@@ -462,12 +478,13 @@ export async function deleteNote(id: number): Promise<void> {
 
 export async function updateNote(
   id: number,
-  input: { title: string; body: string }
+  input: { title: string; body: string; courseName?: string }
 ): Promise<void> {
   await getDb().runAsync(
-    'UPDATE notes SET title = ?, body = ? WHERE id = ?',
+    'UPDATE notes SET title = ?, body = ?, course_name = ? WHERE id = ?',
     input.title,
     input.body,
+    input.courseName?.trim() ?? '',
     id
   );
 }
@@ -555,6 +572,37 @@ export async function getOnboardingDone(): Promise<boolean> {
 
 export async function setOnboardingDone(done: boolean): Promise<void> {
   await setSetting('onboarding_done', done ? '1' : '0');
+}
+
+export async function getIntroDone(): Promise<boolean> {
+  const value = await getSetting('intro_done');
+  return value === '1';
+}
+
+export async function setIntroDone(done: boolean): Promise<void> {
+  await setSetting('intro_done', done ? '1' : '0');
+}
+
+export async function getUserProfile(): Promise<UserProfile | null> {
+  const raw = await getSetting('profile');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<UserProfile>;
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      firstName: typeof parsed.firstName === 'string' ? parsed.firstName : '',
+      lastName: typeof parsed.lastName === 'string' ? parsed.lastName : '',
+      department: typeof parsed.department === 'string' ? parsed.department : '',
+      university: typeof parsed.university === 'string' ? parsed.university : '',
+      year: typeof parsed.year === 'string' ? parsed.year : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function setUserProfile(profile: UserProfile): Promise<void> {
+  await setSetting('profile', JSON.stringify(profile));
 }
 
 export async function wipeUserTables(): Promise<void> {

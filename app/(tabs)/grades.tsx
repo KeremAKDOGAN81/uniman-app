@@ -3,7 +3,12 @@ import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  Card,
+  EduColorCard,
+  EduFormCard,
+  EduGpaHero,
+  EduSectionTitle,
+} from '@/components/edu';
+import {
   Chip,
   EmptyState,
   Field,
@@ -16,6 +21,7 @@ import {
 } from '@/components/ui';
 import { letterColors } from '@/constants/theme';
 import { confirmDelete } from '@/lib/confirm';
+import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { computeGpa100, computeGpa4, formatGpa, letterFromScore, pointsFromLetter } from '@/lib/gpa';
 import { LETTER_GRADES, type LetterGrade } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
@@ -23,6 +29,7 @@ import { useAppStore } from '@/store/useAppStore';
 export function GradesPanel() {
   const c = useColors();
   const courses = useAppStore((state) => state.courses);
+  const schedule = useAppStore((state) => state.schedule);
   const addCourse = useAppStore((state) => state.addCourse);
   const updateCourse = useAppStore((state) => state.updateCourse);
   const removeCourse = useAppStore((state) => state.removeCourse);
@@ -88,29 +95,20 @@ export function GradesPanel() {
     resetForm();
   };
 
+  const formAccent = name.trim() ? colorForCourseName(name, schedule) : c.accent;
+
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
-      <Muted>Web UniMan AGNO: AKTS × harf katsayısı. 4.00 ve 100’lük birlikte.</Muted>
+    <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
+      <EduGpaHero
+        gpa4={courses.length ? formatGpa(gpa4) : '0.00'}
+        gpa100={courses.length ? formatGpa(gpa100, 1) : '0.0'}
+        courseCount={courses.length}
+      />
 
-      <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-        <Card style={{ flex: 1, backgroundColor: c.accent }}>
-          <Text style={{ color: c.onAccent }}>4.00</Text>
-          <Text style={{ color: c.onAccent, fontSize: 30, fontWeight: '800' }}>
-            {courses.length ? formatGpa(gpa4) : '0.00'}
-          </Text>
-        </Card>
-        <Card style={{ flex: 1, backgroundColor: c.pink }}>
-          <Text style={{ color: '#fff' }}>100'lük</Text>
-          <Text style={{ color: '#fff', fontSize: 30, fontWeight: '800' }}>
-            {courses.length ? formatGpa(gpa100, 1) : '0.0'}
-          </Text>
-        </Card>
-      </View>
-
-      <Card style={{ gap: 12 }}>
-        <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>
-          {editingId !== null ? 'Dersi düzenle' : 'Ders ekle'}
-        </Text>
+      <EduFormCard
+        title={editingId !== null ? 'Dersi düzenle' : 'Ders ekle'}
+        accent={formAccent}
+        emoji={name.trim() ? emojiForCourse(name) : '📊'}>
         <Field label="Ders adı" value={name} onChangeText={setName} placeholder="Örn. Veri Yapıları" />
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <View style={{ flex: 1 }}>
@@ -143,15 +141,15 @@ export function GradesPanel() {
         </ScrollView>
         <PrimaryButton label={editingId !== null ? 'Güncelle' : 'Dersi kaydet'} onPress={onSave} />
         {editingId !== null ? <GhostButton label="Vazgeç" onPress={resetForm} /> : null}
-      </Card>
+      </EduFormCard>
 
-      <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>Dönem dersleri</Text>
+      <EduSectionTitle title="Dönem dersleri" />
       {courses.length === 0 ? (
         <EmptyState
           emoji="📊"
-          title="Henüz ders yok"
-          body="Ders adı, AKTS, harf veya 100’lük not. AGNO kartları hemen güncellenir."
-          actionLabel="Örnek ders koy"
+          title="Ders kaydı yok"
+          body="Ders adı, AKTS ve harf notu gir. AGNO otomatik hesaplanır."
+          actionLabel="Ders ekle"
           onAction={() => {
             setName('Veri Yapıları');
             setEcts('5');
@@ -159,32 +157,29 @@ export function GradesPanel() {
           }}
         />
       ) : (
-        courses.map((course) => (
-          <Card key={course.id} style={{ gap: 4 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>{course.name}</Text>
-                <Muted>
-                  {course.ects} AKTS
-                  {course.score100 !== null ? ` · ${course.score100}` : ''}
-                </Muted>
+        courses.map((course) => {
+          const accent = letterColors[course.letter];
+          return (
+            <EduColorCard
+              key={course.id}
+              accent={accent}
+              emoji={emojiForCourse(course.name)}
+              badge={`${course.ects} AKTS · ${course.letter}`}
+              title={course.name}
+              subtitle={course.score100 !== null ? `100'lük not: ${course.score100}` : `${course.letter} harf notu`}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <GhostButton label="Düzenle" onPress={() => onEdit(course)} />
+                <GhostButton
+                  label="Sil"
+                  danger
+                  onPress={() =>
+                    confirmDelete('Ders silinsin mi?', course.name, () => removeCourse(course.id))
+                  }
+                />
               </View>
-              <Text style={{ color: letterColors[course.letter], fontWeight: '800', fontSize: 18 }}>
-                {course.letter}
-              </Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <GhostButton label="Düzenle" onPress={() => onEdit(course)} />
-              <GhostButton
-                label="Sil"
-                danger
-                onPress={() =>
-                  confirmDelete('Ders silinsin mi?', course.name, () => removeCourse(course.id))
-                }
-              />
-            </View>
-          </Card>
-        ))
+            </EduColorCard>
+          );
+        })
       )}
     </ScrollView>
   );

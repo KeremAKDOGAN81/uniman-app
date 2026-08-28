@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 
+import { CourseChipRow } from '@/components/CourseChipRow';
+import { SwipeTabShell } from '@/components/SwipeTabShell';
 import {
-  Card,
+  EduColorCard,
+  EduFormCard,
+  EduHeroBanner,
+  EduPageHeader,
+  EduSearchBar,
+  EduSectionTitle,
+  EduStatTile,
+  eduGradients,
+} from '@/components/edu';
+import {
   Chip,
   EmptyState,
   Field,
@@ -12,10 +22,12 @@ import {
   Muted,
   PrimaryButton,
   Screen,
-  Title,
   useColors,
 } from '@/components/ui';
 import { confirmDelete } from '@/lib/confirm';
+import { collectCourseNames } from '@/lib/courseCatalog';
+import { statNoteTags, statNotesTotal } from '@/lib/copy';
+import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { formatDateTime } from '@/lib/dates';
 import { hapticSuccess } from '@/lib/haptics';
 import { useAppStore } from '@/store/useAppStore';
@@ -27,92 +39,135 @@ export default function NotesScreen() {
   const notes = useAppStore((state) => state.notes);
   const courses = useAppStore((state) => state.courses);
   const schedule = useAppStore((state) => state.schedule);
+  const attendance = useAppStore((state) => state.attendance);
+  const examTargets = useAppStore((state) => state.examTargets);
+  const reminders = useAppStore((state) => state.reminders);
   const addNote = useAppStore((state) => state.addNote);
   const updateNote = useAppStore((state) => state.updateNote);
   const removeNote = useAppStore((state) => state.removeNote);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
+  const [courseName, setCourseName] = useState('');
   const [query, setQuery] = useState('');
+  const [courseFilter, setCourseFilter] = useState<string | null>(null);
 
-  const courseSuggestions = useMemo(() => {
-    const names = new Set<string>();
-    for (const course of courses) {
-      const name = course.name.trim();
-      if (name) names.add(name);
-    }
-    for (const item of schedule) {
-      const title = item.title.trim();
-      if (title) names.add(title);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [courses, schedule]);
+  const courseSuggestions = useMemo(
+    () => collectCourseNames({ courses, schedule, attendance, examTargets, notes, reminders }),
+    [courses, schedule, attendance, examTargets, notes, reminders]
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return notes;
-    return notes.filter(
-      (note) => note.title.toLowerCase().includes(q) || note.body.toLowerCase().includes(q)
-    );
-  }, [notes, query]);
+    return notes.filter((note) => {
+      if (courseFilter && note.courseName.trim() !== courseFilter) return false;
+      if (!q) return true;
+      return (
+        note.title.toLowerCase().includes(q) ||
+        note.body.toLowerCase().includes(q) ||
+        note.courseName.toLowerCase().includes(q)
+      );
+    });
+  }, [notes, query, courseFilter]);
+
+  const tagCount = useMemo(() => {
+    const tags = new Set(notes.map((n) => n.courseName.trim()).filter(Boolean));
+    return tags.size;
+  }, [notes]);
+
+  const notesStat = useMemo(() => statNotesTotal(notes.length), [notes.length]);
+  const tagsStat = useMemo(() => statNoteTags(tagCount), [tagCount]);
 
   useEffect(() => {
     if (courseParam?.trim() && editingId === null) {
-      setNoteTitle(courseParam.trim());
+      setCourseName(courseParam.trim());
     }
   }, [courseParam, editingId]);
 
   const resetForm = () => {
     setEditingId(null);
-    setNoteTitle(courseParam?.trim() ?? '');
+    setNoteTitle('');
     setNoteBody('');
+    setCourseName(courseParam?.trim() ?? '');
   };
 
   const onSave = async () => {
     const heading = noteTitle.trim();
+    const tag = courseName.trim();
     if (!heading) {
-      Alert.alert('Eksik bilgi', 'Not başlığı yaz. Ders adı da olabilir.');
+      Alert.alert('Eksik bilgi', 'Not başlığını yaz.');
+      return;
+    }
+    if (!tag) {
+      Alert.alert('Eksik bilgi', 'Hangi derse ait olduğunu seç veya yaz.');
       return;
     }
     if (editingId !== null) {
-      await updateNote(editingId, { title: heading, body: noteBody.trim() });
+      await updateNote(editingId, { title: heading, body: noteBody.trim(), courseName: tag });
     } else {
-      await addNote({ title: heading, body: noteBody.trim() });
+      await addNote({ title: heading, body: noteBody.trim(), courseName: tag });
     }
     hapticSuccess();
     resetForm();
   };
 
+  const filterOptions = useMemo(() => {
+    const tags = new Set<string>();
+    for (const note of notes) {
+      const tag = note.courseName.trim();
+      if (tag) tags.add(tag);
+    }
+    return [...tags].sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [notes]);
+
+  const formAccent = courseName.trim()
+    ? colorForCourseName(courseName, schedule)
+    : c.pink;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
+    <SwipeTabShell tab="notes">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
-          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
-            <Title>Notlar</Title>
-            <Muted>Tahtadaki iki cümleyi buraya at. Programdan “Bu derse not” dersen başlık hazır gelir.</Muted>
+          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
+            <EduPageHeader
+              title="Notlar"
+              subtitle="Ders notlarını kaydet, etiketle ve ara."
+              badge="Notes"
+              accentColor={c.pink}
+              emoji="📝"
+            />
 
-            <Card style={{ gap: 12 }}>
-              <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>
-                {editingId !== null ? 'Notu düzenle' : 'Hızlı not'}
-              </Text>
-              <Field
-                label="Başlık"
-                value={noteTitle}
-                onChangeText={setNoteTitle}
-                placeholder="Veri Yapıları — ağaçlar"
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <EduStatTile
+                label={notesStat.label}
+                value={notesStat.value}
+                hint={notesStat.hint}
+                gradient={['#E879F9', '#6C5CE7'] as const}
               />
-              {courseSuggestions.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                  {courseSuggestions.map((suggestion) => (
-                    <Chip
-                      key={suggestion}
-                      label={suggestion}
-                      selected={noteTitle === suggestion}
-                      onPress={() => setNoteTitle(suggestion)}
-                    />
-                  ))}
-                </ScrollView>
-              ) : null}
+              <EduStatTile
+                label={tagsStat.label}
+                value={tagsStat.value}
+                hint={tagsStat.hint}
+                gradient={eduGradients.sky}
+              />
+            </View>
+
+            {notes.length > 0 ? (
+              <EduHeroBanner
+                badge="DEFTER"
+                title={`${notes.length} not kayıtlı`}
+                subtitle={tagCount ? `${tagCount} derse ayrılmış` : 'Notlarına ders etiketi ekle'}
+                colors={['#A594FF', '#F0A8FF'] as const}
+              />
+            ) : null}
+
+            <EduFormCard
+              title={editingId !== null ? 'Notu düzenle' : 'Hızlı not'}
+              accent={formAccent}
+              emoji={courseName.trim() ? emojiForCourse(courseName) : '📝'}>
+              <Field label="Ders etiketi" value={courseName} onChangeText={setCourseName} placeholder="Veri Yapıları" />
+              <CourseChipRow names={courseSuggestions} selected={courseName} onSelect={setCourseName} />
+              <Field label="Başlık" value={noteTitle} onChangeText={setNoteTitle} placeholder="Ağaçlar — özet" />
               <Field
                 label="İçerik"
                 value={noteBody}
@@ -122,51 +177,80 @@ export default function NotesScreen() {
               />
               <PrimaryButton label={editingId !== null ? 'Güncelle' : 'Notu kaydet'} onPress={onSave} />
               {editingId !== null ? <GhostButton label="Vazgeç" onPress={resetForm} /> : null}
-            </Card>
+            </EduFormCard>
 
             {notes.length > 0 ? (
-              <Field label="Notlarda ara" value={query} onChangeText={setQuery} placeholder="Ders veya kelime" />
+              <>
+                <EduSearchBar placeholder="Notlarda ara…" value={query} onChangeText={setQuery} />
+                {filterOptions.length > 0 ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    <Chip label="Tümü" selected={courseFilter === null} color={c.pink} onPress={() => setCourseFilter(null)} />
+                    {filterOptions.map((tag) => (
+                      <Chip
+                        key={tag}
+                        label={tag}
+                        selected={courseFilter === tag}
+                        color={colorForCourseName(tag, schedule)}
+                        onPress={() => setCourseFilter(tag)}
+                      />
+                    ))}
+                  </ScrollView>
+                ) : null}
+                <EduSectionTitle title="Kayıtlı notlar" />
+              </>
             ) : null}
 
             {notes.length === 0 ? (
               <EmptyState
                 emoji="📝"
-                title="Defter henüz boş"
-                body="İlk notunu yukarıdan yaz. Program’dan derse dokunup da açabilirsin."
-                actionLabel="Örnek başlık koy"
-                onAction={() => setNoteTitle(courseParam?.trim() || 'Yeni not')}
+                title="Henüz not yok"
+                body="Ders etiketi seç, başlık ve içerik yaz. Programdan derse dokunarak da not açabilirsin."
+                actionLabel="Not yazmaya başla"
+                onAction={() => setCourseName(courseParam?.trim() || 'Veri Yapıları')}
               />
             ) : filtered.length === 0 ? (
               <EmptyState emoji="🔎" title="Eşleşen not yok" body="Başka bir kelime dene veya aramayı sil." />
             ) : (
-              filtered.map((note) => (
-                <Card key={note.id} style={{ gap: 6 }}>
-                  <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>{note.title}</Text>
-                  {note.body ? <Text style={{ color: c.text, lineHeight: 20 }}>{note.body}</Text> : null}
-                  <Muted>{formatDateTime(note.createdAt)}</Muted>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <GhostButton
-                      label="Düzenle"
-                      onPress={() => {
-                        setEditingId(note.id);
-                        setNoteTitle(note.title);
-                        setNoteBody(note.body);
-                      }}
-                    />
-                    <GhostButton
-                      label="Sil"
-                      danger
-                      onPress={() =>
-                        confirmDelete('Not silinsin mi?', note.title, () => removeNote(note.id))
-                      }
-                    />
-                  </View>
-                </Card>
-              ))
+              filtered.map((note) => {
+                const accent = note.courseName.trim()
+                  ? colorForCourseName(note.courseName, schedule)
+                  : c.pink;
+                return (
+                  <EduColorCard
+                    key={note.id}
+                    accent={accent}
+                    emoji={emojiForCourse(note.courseName || note.title)}
+                    badge={note.courseName.trim() || 'NOT'}
+                    title={note.title}
+                    subtitle={formatDateTime(note.createdAt)}>
+                    {note.body ? (
+                      <Text style={{ color: c.text, lineHeight: 21, fontSize: 15 }}>{note.body}</Text>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                      <GhostButton
+                        label="Düzenle"
+                        onPress={() => {
+                          setEditingId(note.id);
+                          setNoteTitle(note.title);
+                          setNoteBody(note.body);
+                          setCourseName(note.courseName);
+                        }}
+                      />
+                      <GhostButton
+                        label="Sil"
+                        danger
+                        onPress={() =>
+                          confirmDelete('Not silinsin mi?', note.title, () => removeNote(note.id))
+                        }
+                      />
+                    </View>
+                  </EduColorCard>
+                );
+              })
             )}
           </ScrollView>
         </Screen>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SwipeTabShell>
   );
 }

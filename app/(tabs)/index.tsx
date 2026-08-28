@@ -1,22 +1,59 @@
-import { Pressable, Image, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMemo } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { Card, EmptyState, Muted, Screen, ThemeToggle, Title, useColors } from '@/components/ui';
+import {
+  EduExamCountdownCard,
+  EduHomeTopBar,
+  EduJoinHero,
+  EduListRow,
+  EduOngoingCourseCard,
+  EduPurpleBar,
+  EduSectionTitle,
+  EduUnifiedCourseCard,
+  EduWeeklySummaryCard,
+  greetingForHour,
+} from '@/components/edu';
+import { SwipeTabShell } from '@/components/SwipeTabShell';
+import { useColors } from '@/components/ui';
+import { hrefForSwipeTab } from '@/constants/swipeTabs';
 import { useClock } from '@/hooks/useClock';
+import { buildCourseCatalog } from '@/lib/courseCatalog';
+import { eduCardShadow, emojiForCourse, progressToneForColor } from '@/lib/courseColor';
 import {
   formatCountdown,
   formatDateTime,
   formatDurationMinutes,
-  formatLongDate,
+  minutesFromClock,
   minutesUntilEnd,
   minutesUntilStart,
   pickNowAndNext,
   todayWeekday,
 } from '@/lib/dates';
+import { computeWeeklySummary, findNextExam } from '@/lib/homeInsights';
+import { displayName, profileSubtitle } from '@/lib/profile';
 import { computeGpa100, computeGpa4, formatGpa } from '@/lib/gpa';
-import { hapticSelect } from '@/lib/haptics';
+import type { Reminder, ScheduleItem } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
+
+function classDuration(item: ScheduleItem): string {
+  const start = minutesFromClock(item.startTime);
+  const end = minutesFromClock(item.endTime);
+  if (start === null || end === null || end <= start) return '—';
+  const mins = end - start;
+  if (mins >= 60) return `${Math.floor(mins / 60)}s ${mins % 60}dk`;
+  return `${mins} dk`;
+}
+
+function courseBadges(entry: ReturnType<typeof buildCourseCatalog>[number]): string[] {
+  const badges: string[] = [];
+  if (entry.scheduleCount > 0) badges.push('Program');
+  if (entry.hasGrade) badges.push(entry.gradeLetter ?? 'AGNO');
+  if (entry.hasAttendance) badges.push('Devam');
+  if (entry.hasExamTarget) badges.push('Final');
+  if (entry.noteCount > 0) badges.push(`${entry.noteCount} not`);
+  return badges.length > 0 ? badges : ['Ders'];
+}
 
 export default function HomeScreen() {
   const c = useColors();
@@ -26,245 +63,295 @@ export default function HomeScreen() {
   const attendance = useAppStore((state) => state.attendance);
   const examTargets = useAppStore((state) => state.examTargets);
   const notes = useAppStore((state) => state.notes);
+  const profile = useAppStore((state) => state.profile);
   const router = useRouter();
   const now = useClock(15000);
   const today = todayWeekday();
   const todaysClasses = today ? schedule.filter((item) => item.weekday === today) : [];
   const { current, next } = pickNowAndNext(todaysClasses, now);
-  const upcoming = reminders.filter((item) => !item.done).slice(0, 3);
-  const riskAttendance = attendance.filter((item) => item.used / item.limit >= 0.75);
+  const openReminders = reminders.filter((item) => !item.done);
+  const greeting = useMemo(() => greetingForHour(now.getHours()), [now]);
   const gpa4 = computeGpa4(courses);
-  const gpa100 = computeGpa100(courses);
-  const hardFinals = examTargets.filter((item) => item.requiredFinal > 75).length;
-  const openReminders = reminders.filter((item) => !item.done).length;
+  const joinedToday = todaysClasses.length ? Math.min(todaysClasses.length, Math.max(1, todaysClasses.indexOf(current ?? next ?? todaysClasses[0]) + 1)) : 0;
+
+  const weeklySummary = useMemo(
+    () =>
+      computeWeeklySummary({
+        scheduleCount: schedule.length,
+        reminders,
+        attendance,
+        courses,
+        now,
+      }),
+    [schedule.length, reminders, attendance, courses, now]
+  );
+
+  const nextExam = useMemo(() => findNextExam(reminders, now), [reminders, now]);
+
+  const catalog = useMemo(
+    () => buildCourseCatalog({ courses, schedule, attendance, examTargets, notes, reminders }),
+    [courses, schedule, attendance, examTargets, notes, reminders]
+  );
+
+  const hero = useMemo(() => {
+    if (current) {
+      const left = minutesUntilEnd(current, now) ?? 0;
+      return {
+        title: `${current.title} — ${formatDurationMinutes(left)} kaldı`,
+        subtitle: current.room || 'Ders devam ediyor',
+        button: 'Derse git',
+        time: current.endTime,
+        action: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      };
+    }
+    if (next) {
+      const until = minutesUntilStart(next, now) ?? 0;
+      return {
+        title: `${next.title} — ${formatDurationMinutes(until)} sonra`,
+        subtitle: next.room || 'Sıradaki ders',
+        button: 'Programa git',
+        time: next.startTime,
+        action: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      };
+    }
+    if (today === null) {
+      return {
+        title: 'Hafta sonu — program duruyor',
+        subtitle: 'Pazartesi gelince burası dolacak',
+        button: 'Program kur',
+        time: '--:--',
+        action: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      };
+    }
+    if (todaysClasses.length === 0) {
+      return {
+        title: 'Bugün ders yok',
+        subtitle: `${today} için program ekle`,
+        button: 'Ders ekle',
+        time: '--:--',
+        action: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      };
+    }
+    return {
+      title: 'Bugünkü dersler bitti',
+      subtitle: 'Yarın için hazırlan',
+      button: 'Program',
+      time: now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      action: () => router.navigate(hrefForSwipeTab('schedule') as never),
+    };
+  }, [current, next, today, todaysClasses.length, now, router]);
+
+  const ongoingCards = useMemo(() => {
+    const cards: {
+      key: string;
+      emoji: string;
+      color: string;
+      title: string;
+      subtitle: string;
+      tags: string[];
+      progress: string;
+      progressColor: string;
+      onPress: () => void;
+    }[] = [];
+    todaysClasses.slice(0, 4).forEach((item) => {
+      const courseColor = item.color || c.accent;
+      cards.push({
+        key: `c-${item.id}`,
+        emoji: emojiForCourse(item.title),
+        color: courseColor,
+        title: item.title,
+        subtitle: `${item.startTime} – ${item.endTime}`,
+        tags: [item.weekday.slice(0, 3)],
+        progress: classDuration(item),
+        progressColor: progressToneForColor(courseColor),
+        onPress: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      });
+    });
+    examTargets.slice(0, 2).forEach((item) => {
+      const courseColor = progressToneForColor(c.accent);
+      cards.push({
+        key: `e-${item.id}`,
+        emoji: '🎯',
+        color: c.accent,
+        title: item.name,
+        subtitle: `Final hedefi: ${item.requiredFinal > 0 ? item.requiredFinal : 'Geçti'}`,
+        tags: ['Final'],
+        progress: 'Hesap',
+        progressColor: courseColor,
+        onPress: () => router.navigate(hrefForSwipeTab('calculator') as never),
+      });
+    });
+    if (cards.length === 0) {
+      cards.push({
+        key: 'empty',
+        emoji: '📅',
+        color: c.accent,
+        title: 'Programını kur',
+        subtitle: 'Program sekmesinden ders ekle',
+        tags: ['Program'],
+        progress: 'Başla',
+        progressColor: progressToneForColor(c.accent),
+        onPress: () => router.navigate(hrefForSwipeTab('schedule') as never),
+      });
+    }
+    return cards;
+  }, [todaysClasses, examTargets, router, c.accent]);
+
+  const feedItems = useMemo(() => {
+    const rows: { key: string; emoji: string; title: string; subtitle: string; accent: string; onPress: () => void }[] = [];
+    openReminders.slice(0, 3).forEach((item: Reminder) => {
+      rows.push({
+        key: `r-${item.id}`,
+        emoji: item.kind === 'sinav' ? '🎯' : '📋',
+        title: item.title,
+        subtitle: `${formatDateTime(item.dueAt)} · ${formatCountdown(item.dueAt, now)}`,
+        accent: item.kind === 'sinav' ? '#FF9F1C' : '#6C5CE7',
+        onPress: () => router.navigate(hrefForSwipeTab('track') as never),
+      });
+    });
+    attendance.filter((a) => a.used / a.limit >= 0.75).forEach((item) => {
+      rows.push({
+        key: `a-${item.id}`,
+        emoji: '⚠️',
+        title: item.name,
+        subtitle: `Devamsızlık ${item.used}/${item.limit}`,
+        accent: '#EF4444',
+        onPress: () => router.navigate(hrefForSwipeTab('track') as never),
+      });
+    });
+    return rows;
+  }, [openReminders, attendance, now, router]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
-      <Screen>
-        <ScrollView contentContainerStyle={{ paddingBottom: 32, gap: 12 }} showsVerticalScrollIndicator={false}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <Image
-                source={require('../../assets/images/icon.png')}
-                style={{ width: 40, height: 40, borderRadius: 12 }}
-              />
-              <View>
-                <Text style={{ color: c.accent, fontWeight: '900', fontSize: 20, letterSpacing: -0.4 }}>
-                  UniMan
-                </Text>
-                <Muted>Kampüs günlüğün</Muted>
-              </View>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Pressable
-                onPress={() => {
-                  hapticSelect();
-                  router.push('/settings' as never);
-                }}
-                style={({ pressed }) => ({
-                  backgroundColor: c.bgElevated,
-                  borderWidth: 1,
-                  borderColor: c.line,
-                  borderRadius: 999,
-                  paddingHorizontal: 12,
-                  paddingVertical: 8,
-                  opacity: pressed ? 0.8 : 1,
-                })}>
-                <Text style={{ color: c.text, fontWeight: '700', fontSize: 13 }}>Ayarlar</Text>
-              </Pressable>
-              <ThemeToggle />
-            </View>
-          </View>
-          <Title>Bugün ne var?</Title>
-          <Text style={{ color: c.muted, fontSize: 16, textTransform: 'capitalize' }}>{formatLongDate()}</Text>
+    <SwipeTabShell tab="index">
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 28, gap: 18 }} showsVerticalScrollIndicator={false}>
+        <EduHomeTopBar
+          greeting={greeting}
+          name={displayName(profile)}
+          subtitle={profileSubtitle(profile)}
+          notifyCount={openReminders.length}
+          onNotify={() => router.navigate(hrefForSwipeTab('track') as never)}
+          onSettings={() => router.push('/settings' as never)}
+        />
 
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() => {
-                hapticSelect();
-                router.push('/(tabs)/calculator');
-              }}>
-              <Card style={{ backgroundColor: c.accent }}>
-                <Text style={{ color: c.onAccent, fontWeight: '700' }}>AGNO</Text>
-                <Text style={{ color: c.onAccent, fontSize: 26, fontWeight: '800' }}>
-                  {courses.length ? formatGpa(gpa4) : '—'}
-                </Text>
-                <Text style={{ color: c.onAccent, opacity: 0.85, marginTop: 2 }}>
-                  {courses.length ? `${formatGpa(gpa100, 1)} / 100` : 'Ders ekle'}
-                </Text>
-              </Card>
-            </Pressable>
-            <Pressable
-              style={{ flex: 1 }}
-              onPress={() => {
-                hapticSelect();
-                router.push('/(tabs)/track');
-              }}>
-              <Card style={{ backgroundColor: c.orange }}>
-                <Text style={{ color: '#fff', fontWeight: '700' }}>Açık</Text>
-                <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>{openReminders}</Text>
-                <Text style={{ color: '#fff', opacity: 0.9, marginTop: 2 }}>
-                  {notes.length} not · {schedule.length} ders
-                </Text>
-              </Card>
-            </Pressable>
-          </View>
+        {nextExam ? (
+          <EduExamCountdownCard
+            title={nextExam.title}
+            countdown={nextExam.countdown}
+            dateLabel={nextExam.dateLabel}
+            onPress={() => router.navigate(hrefForSwipeTab('track') as never)}
+          />
+        ) : null}
 
-          {hardFinals > 0 || riskAttendance.length > 0 ? (
-            <Pressable
-              onPress={() => {
-                hapticSelect();
-                router.push('/(tabs)/track');
-              }}>
-              <Card style={{ borderColor: c.warning, borderWidth: 1.5 }}>
-                <Text style={{ color: c.orange, fontWeight: '800' }}>Dikkat</Text>
-                {hardFinals > 0 ? (
-                  <Text style={{ color: c.text, marginTop: 6 }}>
-                    {hardFinals} derste final hedefi yüksek. Hesap sekmesinden bak.
-                  </Text>
-                ) : null}
-                {riskAttendance.map((item) => (
-                  <Text key={item.id} style={{ color: c.text, marginTop: 4 }}>
-                    {item.name}: {item.used}/{item.limit} devamsızlık
-                  </Text>
-                ))}
-              </Card>
-            </Pressable>
-          ) : null}
+        <EduJoinHero
+          title={hero.title}
+          subtitle={hero.subtitle}
+          buttonLabel={hero.button}
+          statLabel="Bugünkü ders"
+          statValue={todaysClasses.length ? `${joinedToday}/${todaysClasses.length}` : '0/0'}
+          timeLabel={hero.time}
+          onPress={hero.action}
+        />
 
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800', marginTop: 8 }}>Bugünün dersleri</Text>
-          {today === null ? (
-            <EmptyState
-              emoji="☕"
-              title="Hafta sonu, program duruyor"
-              body="Pazartesi gelince burası dolar. Şimdiden Program sekmesinden haftayı kurabilirsin."
-              actionLabel="Programa git"
-              onAction={() => router.push('/(tabs)/schedule')}
-            />
-          ) : todaysClasses.length === 0 ? (
-            <EmptyState
-              emoji="📅"
-              title={`${today} henüz boş`}
-              body="Program → günü seç → ders adı, başlangıç/bitiş, sınıf. Sonra buraya düşer."
-              actionLabel="Ders ekle"
-              onAction={() => router.push('/(tabs)/schedule')}
-            />
-          ) : (
-            <>
-              {current ? (
-                <Card
-                  style={{
-                    borderColor: current.color || c.accent,
-                    borderWidth: 2,
-                    gap: 4,
-                    borderLeftWidth: 6,
-                    borderLeftColor: current.color || c.accent,
-                  }}>
-                  <Text style={{ color: current.color || c.accent, fontWeight: '800', fontSize: 12 }}>ŞİMDİ</Text>
-                  <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>{current.title}</Text>
-                  <Muted>
-                    {current.startTime}–{current.endTime}
-                    {current.room ? ` · ${current.room}` : ''}
-                    {minutesUntilEnd(current, now) !== null
-                      ? ` · ${formatDurationMinutes(minutesUntilEnd(current, now) ?? 0)} kaldı`
-                      : ''}
-                  </Muted>
-                </Card>
-              ) : null}
-              {next ? (
-                <Card
-                  style={{
-                    borderColor: next.color || c.orange,
-                    borderWidth: 1.5,
-                    gap: 4,
-                    borderLeftWidth: 6,
-                    borderLeftColor: next.color || c.orange,
-                  }}>
-                  <Text style={{ color: next.color || c.orange, fontWeight: '800', fontSize: 12 }}>SIRADAKİ</Text>
-                  <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>{next.title}</Text>
-                  <Muted>
-                    {next.startTime}–{next.endTime}
-                    {next.room ? ` · ${next.room}` : ''}
-                    {minutesUntilStart(next, now) !== null
-                      ? ` · ${formatDurationMinutes(minutesUntilStart(next, now) ?? 0)} sonra`
-                      : ''}
-                  </Muted>
-                </Card>
-              ) : null}
-              {!current && !next ? <Muted>Bugünün dersleri bitti.</Muted> : null}
-              {todaysClasses.map((item) => (
-                <Card
-                  key={item.id}
-                  style={{
-                    gap: 4,
-                    opacity: item.id === current?.id || item.id === next?.id ? 1 : 0.85,
-                    borderLeftWidth: 5,
-                    borderLeftColor: item.color || c.line,
-                    borderColor:
-                      item.id === current?.id
-                        ? item.color || c.accent
-                        : item.id === next?.id
-                          ? item.color || c.orange
-                          : c.line,
-                  }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ width: 58 }}>
-                      <Text style={{ color: item.color || c.orange, fontWeight: '800' }}>{item.startTime}</Text>
-                      <Text style={{ color: c.muted, marginTop: 2 }}>{item.endTime}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>{item.title}</Text>
-                      <Muted>
-                        {item.room || 'Sınıf girilmedi'}
-                        {item.remindHours > 0 ? ` · ${item.remindHours}s kala bildirim` : ''}
-                      </Muted>
-                    </View>
-                  </View>
-                </Card>
+        {schedule.length > 0 || courses.length > 0 || openReminders.length > 0 ? (
+          <EduWeeklySummaryCard line={weeklySummary.line} />
+        ) : null}
+
+        {catalog.length > 0 ? (
+          <View style={{ gap: 10 }}>
+            <EduSectionTitle title="Derslerim" action="Program" onAction={() => router.navigate(hrefForSwipeTab('schedule') as never)} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
+              {catalog.slice(0, 8).map((entry) => (
+                <EduUnifiedCourseCard
+                  key={entry.normalized}
+                  emoji={entry.emoji}
+                  color={entry.color}
+                  name={entry.name}
+                  badges={courseBadges(entry)}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/notes',
+                      params: { ders: entry.name },
+                    } as never)
+                  }
+                />
               ))}
-            </>
-          )}
+            </ScrollView>
+          </View>
+        ) : null}
 
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800', marginTop: 8 }}>Yaklaşan</Text>
-          {upcoming.length === 0 ? (
-            <EmptyState
-              emoji="🎯"
-              title="Takvimde sınav yok"
-              body="Takip → Hatırlatma: başlık seç, Bugün/Yarın ve saat dokunuşu yeterli."
-              actionLabel="Hatırlatma ekle"
-              onAction={() => router.push('/(tabs)/track')}
+        <EduSectionTitle
+          title="Devam eden dersler"
+          action="Tümü"
+          onAction={() => router.navigate(hrefForSwipeTab('schedule') as never)}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
+          {ongoingCards.map((card) => (
+            <EduOngoingCourseCard
+              key={card.key}
+              emoji={card.emoji}
+              iconColor={card.color}
+              title={card.title}
+              subtitle={card.subtitle}
+              tags={card.tags}
+              progressLabel={card.progress}
+              progressColor={card.progressColor}
+              onPress={card.onPress}
             />
-          ) : (
-            upcoming.map((item) => (
-              <Pressable
-                key={item.id}
-                onPress={() => {
-                  hapticSelect();
-                  router.push('/(tabs)/track');
-                }}>
-                <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 5,
-                      backgroundColor: item.kind === 'sinav' ? c.warning : c.blue,
-                    }}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>{item.title}</Text>
-                    <Muted>
-                      {item.kind === 'sinav' ? 'Sınav' : 'Ödev'} · {formatDateTime(item.dueAt)} ·{' '}
-                      {formatCountdown(item.dueAt, now)}
-                    </Muted>
-                  </View>
-                </Card>
-              </Pressable>
-            ))
-          )}
+          ))}
         </ScrollView>
-      </Screen>
-    </SafeAreaView>
+
+        {courses.length > 0 ? (
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: c.card,
+                borderRadius: 28,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: c.line,
+                ...eduCardShadow,
+              }}>
+              <Text style={{ color: c.muted, fontSize: 12, fontWeight: '700' }}>AGNO</Text>
+              <Text style={{ color: c.text, fontSize: 28, fontWeight: '900', marginTop: 4 }}>{formatGpa(gpa4)}</Text>
+              <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }}>{formatGpa(computeGpa100(courses), 1)} / 100</Text>
+            </View>
+            <View
+              style={{
+                flex: 1,
+                backgroundColor: c.card,
+                borderRadius: 28,
+                padding: 16,
+                borderWidth: 1,
+                borderColor: c.line,
+                ...eduCardShadow,
+              }}>
+              <Text style={{ color: c.muted, fontSize: 12, fontWeight: '700' }}>Hatırlatma</Text>
+              <Text style={{ color: c.text, fontSize: 28, fontWeight: '900', marginTop: 4 }}>{openReminders.length}</Text>
+              <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }}>açık</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {feedItems.length > 0 ? (
+          <View style={{ gap: 10 }}>
+            <EduSectionTitle title="Yaklaşan" action="Takip" onAction={() => router.navigate(hrefForSwipeTab('track') as never)} />
+            {feedItems.map((row) => (
+              <EduListRow
+                key={row.key}
+                emoji={row.emoji}
+                title={row.title}
+                subtitle={row.subtitle}
+                accent={row.accent}
+                onPress={row.onPress}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        <EduPurpleBar label="Program zaman çizelgesi" onPress={() => router.navigate(hrefForSwipeTab('schedule') as never)} />
+      </ScrollView>
+    </SwipeTabShell>
   );
 }

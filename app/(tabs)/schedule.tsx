@@ -1,10 +1,18 @@
 ﻿import { useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
+import { CourseChipRow } from '@/components/CourseChipRow';
+import { SwipeTabShell } from '@/components/SwipeTabShell';
+import { TimePickerField } from '@/components/TimePickerField';
 import {
-  Card,
+  EduActivityCard,
+  EduFormCard,
+  EduPageHeader,
+  EduTimelineClassCard,
+  EduWeekDateStrip,
+} from '@/components/edu';
+import {
   Chip,
   EmptyState,
   Field,
@@ -12,13 +20,14 @@ import {
   Muted,
   PrimaryButton,
   Screen,
-  Title,
   useColors,
 } from '@/components/ui';
 import { confirmDelete } from '@/lib/confirm';
+import { collectCourseNames, hasAttendanceForName, hasGradeForName } from '@/lib/courseCatalog';
 import { minutesFromClock, padTime, todayWeekday } from '@/lib/dates';
+import { hapticSuccess } from '@/lib/haptics';
+import { shareSchedule } from '@/lib/shareSchedule';
 import {
-  COURSE_COLORS,
   WEEKDAYS,
   type RemindHours,
   type ScheduleItem,
@@ -59,30 +68,6 @@ function RemindRow({
   );
 }
 
-function ColorRow({ value, onChange }: { value: string; onChange: (color: string) => void }) {
-  return (
-    <View style={{ gap: 6 }}>
-      <Muted>Ders rengi</Muted>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-        {COURSE_COLORS.map((swatch) => (
-          <Pressable
-            key={swatch}
-            onPress={() => onChange(swatch)}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 14,
-              backgroundColor: swatch,
-              borderWidth: value === swatch ? 3 : 1,
-              borderColor: value === swatch ? '#FFFFFF' : 'transparent',
-            }}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
 function WeekOverview({
   schedule,
   day,
@@ -92,54 +77,15 @@ function WeekOverview({
   day: Weekday;
   onSelect: (day: Weekday) => void;
 }) {
-  const c = useColors();
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-      {WEEKDAYS.map((item) => {
-        const count = schedule.filter((row) => row.weekday === item).length;
-        const selected = day === item;
-        return (
-          <Pressable
-            key={item}
-            onPress={() => onSelect(item)}
-            style={{
-              width: 72,
-              borderRadius: 16,
-              paddingVertical: 10,
-              paddingHorizontal: 8,
-              backgroundColor: selected ? c.accent : c.bgElevated,
-              borderWidth: 1,
-              borderColor: selected ? c.accent : c.line,
-              alignItems: 'center',
-              gap: 4,
-            }}>
-            <Text style={{ color: selected ? c.onAccent : c.muted, fontWeight: '800', fontSize: 12 }}>
-              {item.slice(0, 3)}
-            </Text>
-            <Text style={{ color: selected ? c.onAccent : c.text, fontWeight: '800', fontSize: 18 }}>
-              {count}
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 3, minHeight: 6 }}>
-              {schedule
-                .filter((row) => row.weekday === item)
-                .slice(0, 4)
-                .map((row) => (
-                  <View
-                    key={row.id}
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 3,
-                      backgroundColor: row.color || c.orange,
-                    }}
-                  />
-                ))}
-            </View>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
+  const days = WEEKDAYS.map((item, index) => ({
+    key: item,
+    label: item.slice(0, 3),
+    dayNum: 15 + index,
+  }));
+  const counts = Object.fromEntries(
+    WEEKDAYS.map((item) => [item, schedule.filter((row) => row.weekday === item).length])
+  ) as Record<string, number>;
+  return <EduWeekDateStrip days={days} selected={day} onSelect={(k) => onSelect(k as Weekday)} counts={counts} />;
 }
 
 export default function ScheduleScreen() {
@@ -147,10 +93,16 @@ export default function ScheduleScreen() {
   const router = useRouter();
   const schedule = useAppStore((state) => state.schedule);
   const courses = useAppStore((state) => state.courses);
+  const attendance = useAppStore((state) => state.attendance);
+  const examTargets = useAppStore((state) => state.examTargets);
+  const notes = useAppStore((state) => state.notes);
+  const reminders = useAppStore((state) => state.reminders);
   const addScheduleItem = useAppStore((state) => state.addScheduleItem);
   const updateScheduleItem = useAppStore((state) => state.updateScheduleItem);
   const removeScheduleItem = useAppStore((state) => state.removeScheduleItem);
   const setClassReminder = useAppStore((state) => state.setClassReminder);
+  const ensureAttendanceForCourse = useAppStore((state) => state.ensureAttendanceForCourse);
+  const ensureGradeForCourse = useAppStore((state) => state.ensureGradeForCourse);
 
   const [day, setDay] = useState<Weekday>(todayWeekday() ?? 'Pazartesi');
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -159,20 +111,11 @@ export default function ScheduleScreen() {
   const [endTime, setEndTime] = useState('10:00');
   const [room, setRoom] = useState('');
   const [remindHours, setRemindHours] = useState<RemindHours>(0);
-  const [color, setColor] = useState<string>(COURSE_COLORS[0]);
 
-  const courseSuggestions = useMemo(() => {
-    const names = new Set<string>();
-    for (const course of courses) {
-      const name = course.name.trim();
-      if (name) names.add(name);
-    }
-    for (const item of schedule) {
-      const name = item.title.trim();
-      if (name) names.add(name);
-    }
-    return [...names].sort((a, b) => a.localeCompare(b, 'tr'));
-  }, [courses, schedule]);
+  const courseSuggestions = useMemo(
+    () => collectCourseNames({ courses, schedule, attendance, examTargets, notes, reminders }),
+    [courses, schedule, attendance, examTargets, notes, reminders]
+  );
 
   const dayItems = useMemo(
     () => schedule.filter((item) => item.weekday === day),
@@ -190,9 +133,36 @@ export default function ScheduleScreen() {
     setTitle('');
     setRoom('');
     setRemindHours(0);
-    setColor(COURSE_COLORS[schedule.length % COURSE_COLORS.length]);
     setStartTime('09:00');
     setEndTime('10:00');
+  };
+
+  const offerCourseLinks = (courseName: string) => {
+    const missingGrade = !hasGradeForName(courseName, courses);
+    const missingAttendance = !hasAttendanceForName(courseName, attendance);
+    if (!missingGrade && !missingAttendance) return;
+
+    const actions: { text: string; onPress?: () => void; style?: 'cancel' | 'default' }[] = [
+      { text: 'Tamam', style: 'cancel' },
+    ];
+    if (missingGrade) {
+      actions.unshift({
+        text: 'AGNO’ya ekle',
+        onPress: () => {
+          void ensureGradeForCourse(courseName).then(() => hapticSuccess());
+        },
+      });
+    }
+    if (missingAttendance) {
+      actions.unshift({
+        text: 'Devamsızlığa ekle',
+        onPress: () => {
+          void ensureAttendanceForCourse(courseName).then(() => hapticSuccess());
+        },
+      });
+    }
+
+    Alert.alert(`${courseName}`, 'Bu dersi diğer modüllere de bağlamak ister misin?', actions);
   };
 
   const onSave = async () => {
@@ -206,7 +176,7 @@ export default function ScheduleScreen() {
     const startMin = minutesFromClock(start);
     const endMin = minutesFromClock(end);
     if (startMin === null || endMin === null) {
-      Alert.alert('Saat hatası', 'Saatleri SS:DD biçiminde yaz.');
+      Alert.alert('Saat hatası', 'Başlangıç ve bitiş saatini seç.');
       return;
     }
     if (endMin <= startMin) {
@@ -232,7 +202,6 @@ export default function ScheduleScreen() {
       endTime: end,
       room: room.trim(),
       remindHours,
-      color,
     };
     if (editingId !== null) {
       const result = await updateScheduleItem(editingId, payload);
@@ -240,6 +209,7 @@ export default function ScheduleScreen() {
     } else {
       const result = await addScheduleItem(payload);
       warnIfNoNotify(remindHours, result.notified);
+      offerCourseLinks(name);
     }
     resetForm();
   };
@@ -252,7 +222,6 @@ export default function ScheduleScreen() {
     setEndTime(item.endTime);
     setRoom(item.room);
     setRemindHours(item.remindHours);
-    setColor(item.color || COURSE_COLORS[0]);
   };
 
   const onChangeReminder = async (id: number, hours: RemindHours) => {
@@ -261,64 +230,86 @@ export default function ScheduleScreen() {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
+    <SwipeTabShell tab="schedule">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
-          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
-            <Title>Haftalık program</Title>
-            <Muted>Renkli dersler, hafta şeridi ve 1 / 2 / 3 saat kala bildirim.</Muted>
+          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
+            <EduPageHeader title="Program" subtitle="Haftalık ders saatlerin ve hatırlatmalar." badge="Program" />
+
+            {schedule.length > 0 ? (
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                <GhostButton label="Programı paylaş" onPress={() => shareSchedule(schedule)} />
+              </View>
+            ) : null}
+
+            <EduActivityCard
+              label="Hatırlatılan ders"
+              percent={
+                dayItems.length
+                  ? Math.min(100, Math.round((dayItems.filter((i) => i.remindHours > 0).length / dayItems.length) * 100) || 40)
+                  : 0
+              }
+            />
 
             <WeekOverview schedule={schedule} day={day} onSelect={setDay} />
-            <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>{day}</Text>
 
             {dayItems.length === 0 ? (
               <EmptyState
                 emoji="📅"
                 title={`${day} günü ders yok`}
-                body="Aşağıdan ders adı, saat ve sınıf yaz. Ana sayfa bugünü buradan okur."
-                actionLabel="Örnek ders adı koy"
+                body="Ders adı, saat ve sınıf ekle. Ana sayfa bugünkü programı buradan okur."
+                actionLabel="Ders ekle"
                 onAction={() => setTitle('Nesne Tabanlı Programlama')}
               />
             ) : (
-              dayItems.map((item) => (
-                <Card
-                  key={item.id}
-                  style={{ gap: 8, borderLeftWidth: 5, borderLeftColor: item.color || c.orange }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: item.color || c.orange, fontWeight: '800' }}>
-                      {item.startTime} – {item.endTime}
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 12 }}>
+              dayItems.map((item) => {
+                const start = minutesFromClock(item.startTime);
+                const end = minutesFromClock(item.endTime);
+                const mins = start !== null && end !== null && end > start ? end - start : 0;
+                const duration = mins >= 60 ? `${Math.floor(mins / 60)}s ${mins % 60}dk` : `${mins} dk`;
+                return (
+                  <View key={item.id} style={{ gap: 8 }}>
+                    <EduTimelineClassCard
+                      timeRange={`${item.startTime} - ${item.endTime}`}
+                      title={item.title}
+                      subtitle={item.room || 'Sınıf belirtilmedi'}
+                      duration={duration}
+                      tag={item.remindHours ? `${item.remindHours}s kala` : 'Ders'}
+                      color={item.color || c.accent}
+                    />
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: 4, gap: 4 }}>
                       <GhostButton label="Düzenle" onPress={() => onEdit(item)} />
                       <GhostButton
                         label="Sil"
                         danger
                         onPress={() =>
-                          confirmDelete('Ders silinsin mi?', item.title, () =>
-                            removeScheduleItem(item.id)
-                          )
+                          confirmDelete('Ders silinsin mi?', item.title, () => removeScheduleItem(item.id))
                         }
                       />
+                      <GhostButton
+                        label="Not"
+                        onPress={() => router.push({ pathname: '/(tabs)/notes', params: { ders: item.title } })}
+                      />
+                      {!hasGradeForName(item.title, courses) ? (
+                        <GhostButton
+                          label="AGNO"
+                          onPress={() => void ensureGradeForCourse(item.title).then(() => hapticSuccess())}
+                        />
+                      ) : null}
+                      {!hasAttendanceForName(item.title, attendance) ? (
+                        <GhostButton
+                          label="Devam"
+                          onPress={() => void ensureAttendanceForCourse(item.title).then(() => hapticSuccess())}
+                        />
+                      ) : null}
                     </View>
+                    <RemindRow value={item.remindHours} onChange={(hours) => onChangeReminder(item.id, hours)} />
                   </View>
-                  <Text style={{ color: c.text, fontSize: 17, fontWeight: '800' }}>{item.title}</Text>
-                  <Muted>{item.room || 'Sınıf girilmedi'}</Muted>
-                  <RemindRow
-                    value={item.remindHours}
-                    onChange={(hours) => onChangeReminder(item.id, hours)}
-                  />
-                  <GhostButton
-                    label="Bu derse not"
-                    onPress={() => router.push({ pathname: '/notes', params: { ders: item.title } })}
-                  />
-                </Card>
-              ))
+                );
+              })
             )}
 
-            <Card style={{ gap: 12, marginTop: 8 }}>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: '800' }}>
-                {editingId !== null ? 'Dersi güncelle' : `${day} için ders ekle`}
-              </Text>
+            <EduFormCard title={editingId !== null ? 'Dersi güncelle' : `${day} için ders ekle`}>
               <Field
                 label="Ders adı"
                 value={title}
@@ -326,37 +317,23 @@ export default function ScheduleScreen() {
                 placeholder="Örn. Nesne Tabanlı Programlama"
               />
               {courseSuggestions.length > 0 ? (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-                  {courseSuggestions.map((suggestion) => (
-                    <Chip
-                      key={suggestion}
-                      label={suggestion}
-                      selected={title === suggestion}
-                      onPress={() => setTitle(suggestion)}
-                    />
-                  ))}
-                </ScrollView>
+                <CourseChipRow names={courseSuggestions} selected={title} onSelect={setTitle} />
               ) : null}
               <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Field label="Başlangıç" value={startTime} onChangeText={setStartTime} placeholder="09:00" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Field label="Bitiş" value={endTime} onChangeText={setEndTime} placeholder="10:50" />
-                </View>
+                <TimePickerField label="Başlangıç" value={startTime} onChange={setStartTime} />
+                <TimePickerField label="Bitiş" value={endTime} onChange={setEndTime} />
               </View>
               <Field label="Sınıf / lab" value={room} onChangeText={setRoom} placeholder="B-204" />
-              <ColorRow value={color} onChange={setColor} />
               <RemindRow value={remindHours} onChange={setRemindHours} />
               <PrimaryButton
                 label={editingId !== null ? 'Kaydet' : 'Programa ekle'}
                 onPress={onSave}
               />
               {editingId !== null ? <GhostButton label="Vazgeç" onPress={resetForm} /> : null}
-            </Card>
+            </EduFormCard>
           </ScrollView>
         </Screen>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </SwipeTabShell>
   );
 }

@@ -1,13 +1,30 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Alert, Share, Text, TextInput, View } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 
 import { Card, GhostButton, Muted, PrimaryButton, useColors } from '@/components/ui';
 import { stringifyBackup } from '@/lib/backup';
 import { confirmAction } from '@/lib/confirm';
 import { useAppStore } from '@/store/useAppStore';
+
+async function exportToFile(json: string): Promise<boolean> {
+  try {
+    const { File, Paths } = await import('expo-file-system');
+    const Sharing = await import('expo-sharing');
+    const file = new File(Paths.cache, `uniman-backup-${Date.now()}.json`);
+    file.create({ overwrite: true });
+    file.write(json);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/json',
+        dialogTitle: 'UniMan yedek',
+      });
+      return true;
+    }
+  } catch {
+    // Native modül yok veya paylaşım başarısız
+  }
+  return false;
+}
 
 export function BackupCard() {
   const c = useColors();
@@ -39,6 +56,7 @@ export function BackupCard() {
     const state = useAppStore.getState();
     const json = stringifyBackup({
       theme: state.theme,
+      profile: state.profile,
       courses: state.courses,
       schedule: state.schedule,
       reminders: state.reminders,
@@ -46,24 +64,13 @@ export function BackupCard() {
       attendance: state.attendance,
       notes: state.notes,
     });
-    try {
-      const file = new File(Paths.cache, `uniman-backup-${Date.now()}.json`);
-      file.create({ overwrite: true });
-      file.write(json);
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: 'application/json',
-          dialogTitle: 'UniMan yedek',
-        });
-        return;
-      }
-    } catch {
-      // Fall through to Share.share
+    const shared = await exportToFile(json);
+    if (!shared) {
+      await Share.share({
+        message: json,
+        title: 'UniMan yedek',
+      });
     }
-    await Share.share({
-      message: json,
-      title: 'UniMan yedek',
-    });
   };
 
   const onImportPaste = () => {
@@ -76,6 +83,8 @@ export function BackupCard() {
 
   const onImportFile = async () => {
     try {
+      const DocumentPicker = await import('expo-document-picker');
+      const { File } = await import('expo-file-system');
       const result = await DocumentPicker.getDocumentAsync({
         type: ['application/json', 'text/plain', '*/*'],
         copyToCacheDirectory: true,
@@ -86,7 +95,10 @@ export function BackupCard() {
       const raw = await file.text();
       confirmWipeThenImport(raw);
     } catch {
-      Alert.alert('Dosya okunamadı', 'JSON yedek dosyasını yeniden seç.');
+      Alert.alert(
+        'Dosya seçici yok',
+        'Bu geliştirme sürümünde dosya modülü yüklü değil. JSON yedeği yapıştırarak içe aktarabilirsin.'
+      );
     }
   };
 

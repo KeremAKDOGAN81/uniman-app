@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { BackupCard } from '@/components/BackupCard';
-import { Card, Chip, GhostButton, Muted, PrimaryButton, Screen, Title, useColors } from '@/components/ui';
+import { Card, Chip, Field, GhostButton, Muted, PrimaryButton, Screen, Title, useColors } from '@/components/ui';
+import { isProfileComplete } from '@/lib/profile';
 import { ensureNotificationPermission } from '@/lib/notifications';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -12,9 +13,32 @@ export default function SettingsScreen() {
   const c = useColors();
   const router = useRouter();
   const theme = useAppStore((state) => state.theme);
+  const profile = useAppStore((state) => state.profile);
   const setTheme = useAppStore((state) => state.setTheme);
+  const saveProfile = useAppStore((state) => state.saveProfile);
+  const [firstName, setFirstName] = useState(profile?.firstName ?? '');
+  const [lastName, setLastName] = useState(profile?.lastName ?? '');
+  const [department, setDepartment] = useState(profile?.department ?? '');
+  const [university, setUniversity] = useState(profile?.university ?? '');
+  const [year, setYear] = useState(profile?.year ?? '');
   const [notifyStatus, setNotifyStatus] = useState<string | null>(null);
   const [notifyDenied, setNotifyDenied] = useState(false);
+
+  const onSaveProfile = async () => {
+    const next = {
+      firstName: firstName.trim(),
+      lastName: lastName.trim(),
+      department: department.trim(),
+      university: university.trim(),
+      year: year.trim(),
+    };
+    if (!isProfileComplete(next)) {
+      Alert.alert('Eksik bilgi', 'Ad, soyad ve bölüm alanları zorunludur.');
+      return;
+    }
+    await saveProfile(next);
+    Alert.alert('Kaydedildi', 'Profil bilgilerin güncellendi.');
+  };
 
   const onCheckNotify = async () => {
     const ok = await ensureNotificationPermission();
@@ -28,14 +52,26 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
       <Screen>
-        <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 12 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Title>Ayarlar</Title>
             <Pressable onPress={() => router.back()}>
               <Text style={{ color: c.blue, fontWeight: '700' }}>Kapat</Text>
             </Pressable>
           </View>
-          <Muted>Tema, bildirim ve yedek burada. Ana sayfadaki kısayollar da aynı işi görür.</Muted>
+          <Muted>Tema, profil, bildirim ve yedek burada.</Muted>
+
+          <Card style={{ gap: 10 }}>
+            <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>Profil</Text>
+            <Muted>Ana sayfada görünen adın ve bölüm bilgilerin.</Muted>
+            <Field label="Ad" value={firstName} onChangeText={setFirstName} placeholder="Ad" autoCapitalize="words" />
+            <Field label="Soyad" value={lastName} onChangeText={setLastName} placeholder="Soyad" autoCapitalize="words" />
+            <Field label="Bölüm" value={department} onChangeText={setDepartment} placeholder="Bölüm" autoCapitalize="words" />
+            <Field label="Üniversite" value={university} onChangeText={setUniversity} placeholder="Üniversite" autoCapitalize="words" />
+            <Field label="Sınıf" value={year} onChangeText={setYear} placeholder="2. sınıf" />
+            <PrimaryButton label="Profili kaydet" onPress={onSaveProfile} />
+          </Card>
 
           <Card style={{ gap: 10 }}>
             <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>Görünüm</Text>
@@ -62,7 +98,8 @@ export default function SettingsScreen() {
           </Card>
 
           <BackupCard />
-        </ScrollView>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Screen>
     </SafeAreaView>
   );

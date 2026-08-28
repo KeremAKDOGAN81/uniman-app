@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { palettes } from '@/constants/theme';
@@ -21,17 +22,17 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
   const ready = useAppStore((state) => state.ready);
-  const onboardingDone = useAppStore((state) => state.onboardingDone);
+  const profileComplete = useAppStore((state) => state.profileComplete);
 
   useEffect(() => {
     if (!ready) return;
     const onOnboarding = String(segments[0] ?? '') === 'onboarding';
-    if (!onboardingDone && !onOnboarding) {
+    if (!profileComplete && !onOnboarding) {
       router.replace('/onboarding' as never);
-    } else if (onboardingDone && onOnboarding) {
+    } else if (profileComplete && onOnboarding) {
       router.replace('/(tabs)' as never);
     }
-  }, [ready, onboardingDone, segments, router]);
+  }, [ready, profileComplete, segments, router]);
 
   return <>{children}</>;
 }
@@ -77,16 +78,18 @@ export default function RootLayout() {
   };
 
   return (
-    <ThemeProvider value={navTheme}>
-      <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <OnboardingGate>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
-        </Stack>
-      </OnboardingGate>
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={navTheme}>
+        <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+        <OnboardingGate>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+          </Stack>
+        </OnboardingGate>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

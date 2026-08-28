@@ -52,29 +52,29 @@ export function finalMessage(requiredFinal: number): {
   if (requiredFinal > 100) {
     return {
       tone: 'critical',
-      text: `Kritik durum: Finalden ${requiredFinal} alman lazım. Mucizelere ihtiyacımız var!`,
+      text: `Yıl içi notun yetmiyor — finalden en az ${requiredFinal} puan gerekir.`,
     };
   }
   if (requiredFinal > 75) {
     return {
       tone: 'hard',
-      text: `Zorlu görev: Finalden en az ${requiredFinal} almalısın. Sıkı çalışman gerekecek!`,
+      text: `Finalden en az ${requiredFinal} puan alman gerekiyor.`,
     };
   }
   if (requiredFinal > 40) {
     return {
       tone: 'ok',
-      text: `Hedef: Finalden en az ${requiredFinal} almalısın. Rahatlıkla yapabilirsin!`,
+      text: `Finalden en az ${requiredFinal} puan hedefle.`,
     };
   }
   if (requiredFinal > 0) {
     return {
       tone: 'easy',
-      text: `Çok rahat: Finalden sadece ${requiredFinal} alman yetiyor.`,
+      text: `Finalden ${requiredFinal} puan yeterli.`,
     };
   }
   return {
     tone: 'passed',
-    text: 'Geçtin bile: Finalden 0 alsan da geçiyorsun.',
+    text: 'Yıl içi notun geçmeye yetiyor — final şart değil.',
   };
 }

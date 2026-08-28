@@ -18,14 +18,14 @@ export type Course = {
 export type RemindHours = 0 | 1 | 2 | 3;
 
 export const COURSE_COLORS = [
-  '#0F766E',
-  '#EA580C',
-  '#BE185D',
-  '#1D4ED8',
-  '#15803D',
-  '#CA8A04',
-  '#7C3AED',
-  '#0891B2',
+  '#6C5CE7',
+  '#3B82F6',
+  '#22C55E',
+  '#FF9F1C',
+  '#EF4444',
+  '#EC4899',
+  '#14B8A6',
+  '#F97316',
 ] as const;
 
 export type CourseColor = (typeof COURSE_COLORS)[number];
@@ -71,5 +71,14 @@ export type Note = {
   id: number;
   title: string;
   body: string;
+  courseName: string;
   createdAt: string;
+};
+
+export type UserProfile = {
+  firstName: string;
+  lastName: string;
+  department: string;
+  university: string;
+  year: string;
 };
