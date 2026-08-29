@@ -16,6 +16,8 @@ export type UniManBackup = {
   exportedAt: string;
   theme: ThemeName;
   profile?: UserProfile | null;
+  activeSemester?: string;
+  morningSummaryEnabled?: boolean;
   courses: Course[];
   schedule: ScheduleItem[];
   reminders: Reminder[];
@@ -46,6 +48,9 @@ export function parseBackup(raw: string): UniManBackup {
     exportedAt: parsed.exportedAt ?? new Date().toISOString(),
     theme: parsed.theme === 'dark' ? 'dark' : 'light',
     profile: parsed.profile ?? null,
+    activeSemester: typeof parsed.activeSemester === 'string' ? parsed.activeSemester : undefined,
+    morningSummaryEnabled:
+      typeof parsed.morningSummaryEnabled === 'boolean' ? parsed.morningSummaryEnabled : undefined,
     courses: parsed.courses,
     schedule: parsed.schedule,
     reminders: parsed.reminders ?? [],

@@ -2,7 +2,7 @@
   "expo": {
     "name": "UniMan",
     "slug": "uniman-app",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "uniman",
@@ -43,7 +43,13 @@
           "backgroundColor": "#EAF2FF"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "UniMan notlarına fotoğraf eklemek için galeri erişimi gerekir."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

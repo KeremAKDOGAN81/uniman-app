@@ -108,7 +108,8 @@ export function buildCourseCatalog(input: CatalogInput): CourseCatalogEntry[] {
 
   for (const reminder of input.reminders) {
     if (reminder.done || reminder.kind !== 'sinav' || !isUpcoming(reminder.dueAt)) continue;
-    const entry = ensure(reminder.title);
+    const label = reminder.courseName?.trim() || reminder.title;
+    const entry = ensure(label);
     if (!entry) continue;
     entry.upcomingExams += 1;
   }

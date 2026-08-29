@@ -4,6 +4,7 @@ import { isLetterGrade, pointsFromLetter } from '@/lib/gpa';
 import type {
   AttendanceItem,
   Course,
+  ExamExtra,
   ExamTarget,
   LetterGrade,
   Note,
@@ -25,6 +26,7 @@ type CourseRow = {
   letter: string;
   points: number;
   score100: number | null;
+  semester?: string | null;
 };
 
 type ScheduleRow = {
@@ -108,6 +110,42 @@ export async function initDb(): Promise<void> {
   `);
   await migrateScheduleColumns(database);
   await migrateNotesColumns(database);
+  await migrateExtendedColumns(database);
+}
+
+async function migrateExtendedColumns(database: SQLite.SQLiteDatabase): Promise<void> {
+  const courseCols = await database.getAllAsync<{ name: string }>('PRAGMA table_info(courses)');
+  if (!courseCols.some((c) => c.name === 'semester')) {
+    await database.execAsync("ALTER TABLE courses ADD COLUMN semester TEXT NOT NULL DEFAULT ''");
+  }
+
+  const examCols = await database.getAllAsync<{ name: string }>('PRAGMA table_info(exam_targets)');
+  const examNames = new Set(examCols.map((c) => c.name));
+  if (!examNames.has('passing')) {
+    await database.execAsync('ALTER TABLE exam_targets ADD COLUMN passing REAL NOT NULL DEFAULT 60');
+  }
+  if (!examNames.has('midterm_score')) {
+    await database.execAsync('ALTER TABLE exam_targets ADD COLUMN midterm_score REAL NOT NULL DEFAULT 0');
+  }
+  if (!examNames.has('midterm_weight')) {
+    await database.execAsync('ALTER TABLE exam_targets ADD COLUMN midterm_weight REAL NOT NULL DEFAULT 40');
+  }
+  if (!examNames.has('extras_json')) {
+    await database.execAsync("ALTER TABLE exam_targets ADD COLUMN extras_json TEXT NOT NULL DEFAULT '[]'");
+  }
+
+  const reminderCols = await database.getAllAsync<{ name: string }>('PRAGMA table_info(reminders)');
+  if (!reminderCols.some((c) => c.name === 'course_name')) {
+    await database.execAsync("ALTER TABLE reminders ADD COLUMN course_name TEXT NOT NULL DEFAULT ''");
+  }
+
+  const noteCols = await database.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'pinned')) {
+    await database.execAsync('ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!noteCols.some((c) => c.name === 'image_uri')) {
+    await database.execAsync("ALTER TABLE notes ADD COLUMN image_uri TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 async function migrateNotesColumns(database: SQLite.SQLiteDatabase): Promise<void> {
@@ -134,6 +172,22 @@ async function migrateScheduleColumns(database: SQLite.SQLiteDatabase): Promise<
   }
 }
 
+function parseExtras(raw: string | null | undefined): ExamExtra[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => ({
+        score: Number((item as ExamExtra).score),
+        weight: Number((item as ExamExtra).weight),
+      }))
+      .filter((item) => Number.isFinite(item.score) && Number.isFinite(item.weight));
+  } catch {
+    return [];
+  }
+}
+
 function mapCourse(row: CourseRow): Course {
   const letter: LetterGrade = isLetterGrade(row.letter) ? row.letter : 'FF';
   return {
@@ -143,6 +197,7 @@ function mapCourse(row: CourseRow): Course {
     letter,
     points: row.points,
     score100: row.score100,
+    semester: row.semester ?? '',
   };
 }
 
@@ -153,20 +208,41 @@ export async function getCourses(): Promise<Course[]> {
   return rows.map(mapCourse);
 }
 
+export async function getMorningSummaryEnabled(): Promise<boolean> {
+  const value = await getSetting('morning_summary');
+  return value !== '0';
+}
+
+export async function setMorningSummaryEnabled(enabled: boolean): Promise<void> {
+  await setSetting('morning_summary', enabled ? '1' : '0');
+}
+
+export async function getActiveSemester(): Promise<string> {
+  const value = await getSetting('active_semester');
+  return value?.trim() || '2025-2026 Güz';
+}
+
+export async function setActiveSemester(value: string): Promise<void> {
+  await setSetting('active_semester', value.trim() || '2025-2026 Güz');
+}
+
 export async function insertCourse(input: {
   name: string;
   ects: number;
   letter: LetterGrade;
   score100: number | null;
+  semester?: string;
 }): Promise<Course> {
   const points = pointsFromLetter(input.letter);
+  const semester = input.semester ?? (await getActiveSemester());
   const result = await getDb().runAsync(
-    'INSERT INTO courses (name, ects, letter, points, score100) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO courses (name, ects, letter, points, score100, semester) VALUES (?, ?, ?, ?, ?, ?)',
     input.name,
     input.ects,
     input.letter,
     points,
-    input.score100
+    input.score100,
+    semester
   );
   return {
     id: Number(result.lastInsertRowId),
@@ -175,6 +251,7 @@ export async function insertCourse(input: {
     letter: input.letter,
     points,
     score100: input.score100,
+    semester,
   };
 }
 
@@ -266,6 +343,7 @@ export async function getReminders(): Promise<Reminder[]> {
     dueAt: row.due_at,
     notificationId: row.notification_id,
     done: row.done === 1,
+    courseName: (row as { course_name?: string }).course_name ?? '',
   }));
 }
 
@@ -274,13 +352,16 @@ export async function insertReminder(input: {
   kind: ReminderKind;
   dueAt: string;
   notificationId: string | null;
+  courseName?: string;
 }): Promise<Reminder> {
+  const courseName = input.courseName?.trim() ?? '';
   const result = await getDb().runAsync(
-    'INSERT INTO reminders (title, kind, due_at, notification_id, done) VALUES (?, ?, ?, ?, 0)',
+    'INSERT INTO reminders (title, kind, due_at, notification_id, done, course_name) VALUES (?, ?, ?, ?, 0, ?)',
     input.title,
     input.kind,
     input.dueAt,
-    input.notificationId
+    input.notificationId,
+    courseName
   );
   return {
     id: Number(result.lastInsertRowId),
@@ -289,6 +370,7 @@ export async function insertReminder(input: {
     dueAt: input.dueAt,
     notificationId: input.notificationId,
     done: false,
+    courseName,
   };
 }
 
@@ -334,12 +416,20 @@ export async function getExamTargets(): Promise<ExamTarget[]> {
     name: string;
     year_points: number;
     required_final: number;
+    passing?: number | null;
+    midterm_score?: number | null;
+    midterm_weight?: number | null;
+    extras_json?: string | null;
   }>('SELECT * FROM exam_targets ORDER BY id DESC');
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     yearPoints: row.year_points,
     requiredFinal: row.required_final,
+    passing: row.passing ?? 60,
+    midtermScore: row.midterm_score ?? 0,
+    midtermWeight: row.midterm_weight ?? 40,
+    extras: parseExtras(row.extras_json),
   }));
 }
 
@@ -347,16 +437,35 @@ export async function insertExamTarget(input: {
   name: string;
   yearPoints: number;
   requiredFinal: number;
+  passing?: number;
+  midtermScore?: number;
+  midtermWeight?: number;
+  extras?: ExamExtra[];
 }): Promise<ExamTarget> {
+  const passing = input.passing ?? 60;
+  const midtermScore = input.midtermScore ?? 0;
+  const midtermWeight = input.midtermWeight ?? 40;
+  const extras = input.extras ?? [];
   const result = await getDb().runAsync(
-    'INSERT INTO exam_targets (name, year_points, required_final) VALUES (?, ?, ?)',
+    `INSERT INTO exam_targets (name, year_points, required_final, passing, midterm_score, midterm_weight, extras_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     input.name,
     input.yearPoints,
-    input.requiredFinal
+    input.requiredFinal,
+    passing,
+    midtermScore,
+    midtermWeight,
+    JSON.stringify(extras)
   );
   return {
     id: Number(result.lastInsertRowId),
-    ...input,
+    name: input.name,
+    yearPoints: input.yearPoints,
+    requiredFinal: input.requiredFinal,
+    passing,
+    midtermScore,
+    midtermWeight,
+    extras,
   };
 }
 
@@ -366,13 +475,26 @@ export async function deleteExamTarget(id: number): Promise<void> {
 
 export async function updateExamTarget(
   id: number,
-  input: { name: string; yearPoints: number; requiredFinal: number }
+  input: {
+    name: string;
+    yearPoints: number;
+    requiredFinal: number;
+    passing?: number;
+    midtermScore?: number;
+    midtermWeight?: number;
+    extras?: ExamExtra[];
+  }
 ): Promise<void> {
   await getDb().runAsync(
-    'UPDATE exam_targets SET name = ?, year_points = ?, required_final = ? WHERE id = ?',
+    `UPDATE exam_targets SET name = ?, year_points = ?, required_final = ?,
+     passing = ?, midterm_score = ?, midterm_weight = ?, extras_json = ? WHERE id = ?`,
     input.name,
     input.yearPoints,
     input.requiredFinal,
+    input.passing ?? 60,
+    input.midtermScore ?? 0,
+    input.midtermWeight ?? 40,
+    JSON.stringify(input.extras ?? []),
     id
   );
 }
@@ -443,25 +565,41 @@ export async function getNotes(): Promise<Note[]> {
     body: string;
     created_at: string;
     course_name?: string | null;
-  }>('SELECT * FROM notes ORDER BY id DESC');
+  }>('SELECT * FROM notes ORDER BY pinned DESC, id DESC');
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
     body: row.body,
     courseName: row.course_name ?? '',
     createdAt: row.created_at,
+    pinned: Boolean((row as { pinned?: number }).pinned),
+    imageUri: (row as { image_uri?: string }).image_uri ?? '',
   }));
 }
 
-export async function insertNote(input: { title: string; body: string; courseName?: string }): Promise<Note> {
+export async function setNotePinned(id: number, pinned: boolean): Promise<void> {
+  await getDb().runAsync('UPDATE notes SET pinned = ? WHERE id = ?', pinned ? 1 : 0, id);
+}
+
+export async function insertNote(input: {
+  title: string;
+  body: string;
+  courseName?: string;
+  pinned?: boolean;
+  imageUri?: string;
+}): Promise<Note> {
   const createdAt = new Date().toISOString();
   const courseName = input.courseName?.trim() ?? '';
+  const pinned = input.pinned ? 1 : 0;
+  const imageUri = input.imageUri?.trim() ?? '';
   const result = await getDb().runAsync(
-    'INSERT INTO notes (title, body, course_name, created_at) VALUES (?, ?, ?, ?)',
+    'INSERT INTO notes (title, body, course_name, created_at, pinned, image_uri) VALUES (?, ?, ?, ?, ?, ?)',
     input.title,
     input.body,
     courseName,
-    createdAt
+    createdAt,
+    pinned,
+    imageUri
   );
   return {
     id: Number(result.lastInsertRowId),
@@ -469,6 +607,8 @@ export async function insertNote(input: { title: string; body: string; courseNam
     body: input.body,
     courseName,
     createdAt,
+    pinned: Boolean(pinned),
+    imageUri,
   };
 }
 
@@ -478,13 +618,14 @@ export async function deleteNote(id: number): Promise<void> {
 
 export async function updateNote(
   id: number,
-  input: { title: string; body: string; courseName?: string }
+  input: { title: string; body: string; courseName?: string; imageUri?: string }
 ): Promise<void> {
   await getDb().runAsync(
-    'UPDATE notes SET title = ?, body = ?, course_name = ? WHERE id = ?',
+    'UPDATE notes SET title = ?, body = ?, course_name = ?, image_uri = ? WHERE id = ?',
     input.title,
     input.body,
     input.courseName?.trim() ?? '',
+    input.imageUri?.trim() ?? '',
     id
   );
 }
@@ -553,14 +694,16 @@ export async function updateReminder(
     kind: ReminderKind;
     dueAt: string;
     notificationId: string | null;
+    courseName?: string;
   }
 ): Promise<void> {
   await getDb().runAsync(
-    'UPDATE reminders SET title = ?, kind = ?, due_at = ?, notification_id = ? WHERE id = ?',
+    'UPDATE reminders SET title = ?, kind = ?, due_at = ?, notification_id = ?, course_name = ? WHERE id = ?',
     input.title,
     input.kind,
     input.dueAt,
     input.notificationId,
+    input.courseName?.trim() ?? '',
     id
   );
 }

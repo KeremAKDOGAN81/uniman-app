@@ -23,12 +23,14 @@ import { letterColors } from '@/constants/theme';
 import { confirmDelete } from '@/lib/confirm';
 import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { computeGpa100, computeGpa4, formatGpa, letterFromScore, pointsFromLetter } from '@/lib/gpa';
+import { filterCoursesBySemester } from '@/lib/semester';
 import { LETTER_GRADES, type LetterGrade } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
 
 export function GradesPanel() {
   const c = useColors();
   const courses = useAppStore((state) => state.courses);
+  const activeSemester = useAppStore((state) => state.activeSemester);
   const schedule = useAppStore((state) => state.schedule);
   const addCourse = useAppStore((state) => state.addCourse);
   const updateCourse = useAppStore((state) => state.updateCourse);
@@ -38,8 +40,9 @@ export function GradesPanel() {
   const [ects, setEcts] = useState('5');
   const [score, setScore] = useState('');
   const [letter, setLetter] = useState<LetterGrade>('CC');
-  const gpa4 = computeGpa4(courses);
-  const gpa100 = computeGpa100(courses);
+  const semesterCourses = filterCoursesBySemester(courses, activeSemester);
+  const gpa4 = computeGpa4(semesterCourses);
+  const gpa100 = computeGpa100(semesterCourses);
 
   const applyScore = (value: string) => {
     setScore(value);
@@ -100,10 +103,11 @@ export function GradesPanel() {
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
       <EduGpaHero
-        gpa4={courses.length ? formatGpa(gpa4) : '0.00'}
-        gpa100={courses.length ? formatGpa(gpa100, 1) : '0.0'}
-        courseCount={courses.length}
+        gpa4={semesterCourses.length ? formatGpa(gpa4) : '0.00'}
+        gpa100={semesterCourses.length ? formatGpa(gpa100, 1) : '0.0'}
+        courseCount={semesterCourses.length}
       />
+      <Muted>Aktif dönem: {activeSemester}</Muted>
 
       <EduFormCard
         title={editingId !== null ? 'Dersi düzenle' : 'Ders ekle'}
@@ -144,7 +148,7 @@ export function GradesPanel() {
       </EduFormCard>
 
       <EduSectionTitle title="Dönem dersleri" />
-      {courses.length === 0 ? (
+      {semesterCourses.length === 0 ? (
         <EmptyState
           emoji="📊"
           title="Ders kaydı yok"
@@ -157,7 +161,7 @@ export function GradesPanel() {
           }}
         />
       ) : (
-        courses.map((course) => {
+        semesterCourses.map((course) => {
           const accent = letterColors[course.letter];
           return (
             <EduColorCard

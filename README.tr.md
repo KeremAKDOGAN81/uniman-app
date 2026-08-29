@@ -8,24 +8,36 @@ Program, AGNO, final hedefi, not ve hatırlatma için **çevrimdışı** öğren
 
 ## Öne çıkanlar
 
-- **Renkli Edu arayüz** — oval kartlar, gradientler, derse göre otomatik renk atama.
-- **Kaydırmalı sekmeler** — beş ana ekran; yatay kaydırma veya üst oklarla geçiş (alt tab bar yok).
-- **İlk açılış** — kısa tanıtım, ardından profil (ad, soyad, bölüm; isteğe bağlı üniversite/sınıf). Profil kaydedilmeden uygulama açılmaz.
+- **Renkli Edu arayüz** — oval kartlar, gradientler, derse göre otomatik renk.
+- **Kaydırmalı sekmeler** — üst barı kaydır, noktalara dokun veya okları kullan (alt tab bar yok).
+- **Ders merkezi** — ana sayfadaki ders kartından program, not, devamsızlık ve hızlı işlemler.
+- **Sabah özeti** — her gün 07:30 bildirim + ana sayfada Bugün kartı.
+- **Haftalık rapor & odak modu** — haftalık özet ekranı ve pomodoro tarzı çalışma sayacı.
+- **İlk açılış** — kısa tanıtım, profil (ad, bölüm). Profil kaydedilmeden uygulama açılmaz.
 - **Gizlilik** — veriler telefondan çıkmaz; yalnızca JSON yedek dışa aktarırsan paylaşırsın.
 
 ## Sekmeler
 
 | Sekme | Ne işe yarar? |
 |-------|----------------|
-| **Ana sayfa** | İsimle selamlama, sıradaki sınav, bugünkü dersler, haftalık özet, **Derslerim**, AGNO ve açık hatırlatmalar. |
-| **Program** | Pazartesi–Cuma programı, dersten 1 / 2 / 3 saat önce bildirim, haftayı metin olarak paylaş, dersi AGNO/devamsızlığa bağla. |
-| **Hesap** | **Final:** vize + ağırlıklı etkinliklerden gerekli final notu. **AGNO:** dönem ortalaması (4.00 ve 100’lük). Üst kartlar son değeri veya *Hesaplanmadı* gösterir. |
-| **Notlar** | Derse etiketli notlar, arama ve derse göre filtre; programdan derse dokunarak açılabilir. |
-| **Takip** | Sınav/ödev hatırlatmaları (yerel bildirim) ve devamsızlık limiti takibi. |
+| **Ana sayfa** | Selamlama, sıradaki sınav, bugünkü dersler, sabah özeti, haftalık özet, **Derslerim**, dönem AGNO, boş saatler. |
+| **Program** | Gün / hafta görünümü, Pazartesi–Cuma programı, 1 / 2 / 3 saat önce bildirim, haftayı paylaş. |
+| **Hesap** | **Final:** vize + ağırlıklı etkinliklerden gerekli not. **AGNO:** ayarlardaki aktif döneme göre ortalama. |
+| **Notlar** | Derse etiketli notlar, markdown önizleme, isteğe bağlı fotoğraf, sabitleme, arama. |
+| **Takip** | Sınav/ödev hatırlatmaları ve devamsızlık limiti. |
+
+### Ek ekranlar
+
+| Ekran | Ne işe yarar? |
+|-------|----------------|
+| **Ders merkezi** | Derse özel özet: + not, + devamsızlık, final, hatırlatma, odak modu. |
+| **Haftalık rapor** | Sınavlar, devamsızlık uyarıları, boş saatler, dönem AGNO. |
+| **Odak modu** | 25 / 45 / 15 dakika çalışma sayacı. |
+| **Ayarlar** | Profil, aktif dönem, tema, bildirimler, sabah özeti, yedek. |
 
 ## Ders birleştirme
 
-Program, AGNO, devamsızlık, notlar ve final hesapları aynı ders kataloğunu kullanır (`lib/courseCatalog.ts`). Derse ekleme sonrası AGNO veya devamsızlığa bağlama önerilir; formlarda mevcut ders adları chip olarak çıkar.
+Program, AGNO, devamsızlık, notlar ve final hesapları aynı ders kataloğunu kullanır (`lib/courseCatalog.ts`).
 
 ## Mimari
 
@@ -36,41 +48,38 @@ Expo Router ekranları
   → expo-notifications (yalnızca yerel)
 ```
 
-İş kuralları: `lib/gpa.ts`, `lib/finalGrade.ts`, `lib/homeInsights.ts`, `lib/copy.ts`, `lib/profile.ts`, `lib/shareSchedule.ts`.
-
-Arayüz: `components/edu.tsx`, `components/SwipeTabShell.tsx`.
-
 ## Yedek
 
-Ayarlar → JSON dışa aktar (dersler, program, hatırlatmalar, notlar, profil, tema). İçe aktarma onaydan sonra cihaz verisini değiştirir.
+Ayarlar → JSON dışa aktar (dersler, program, hatırlatmalar, notlar, final hedefleri, devamsızlık, profil, tema, **aktif dönem**, **sabah özeti**). Not fotoğrafları cihaza özel URI’dır; başka telefonda içe aktarınca görünmeyebilir.
 
 ## Çalıştırma
 
-JDK 17, Android SDK ve emülatör veya cihaz gerekir. İlk native derleme:
+JDK 17, Android SDK ve emülatör veya cihaz gerekir.
+
+**İlk kurulum / native paket sonrası** (ör. fotoğraf seçici):
 
 ```bash
 npm install
 npx expo run:android
 ```
 
-Günlük geliştirme:
+**Günlük geliştirme** (dev client zaten yüklüyse):
 
 ```bash
 npm start
-# veya: npx expo start --dev-client
 ```
 
-Yeni native paket eklenince `run:android` tekrar gerekir.
+Yenileme: Metro terminalinde `r`, veya emülatörde **Ctrl+M → Reload**.
 
 ## Telefona APK
 
-EAS ile preview `.apk` (Windows `.exe` değil):
+Bağımsız preview `.apk` (dev client değil):
 
 ```bash
 npx eas-cli build --platform android --profile preview
 ```
 
-Derleme bitince Expo sayfasından APK’yı indir, telefona at, kur (gerekirse bilinmeyen kaynaklara izin ver). iPhone bu APK’yı kuramaz.
+Expo build sayfasından APK’yı indir, telefona at, kur. iPhone bu APK’yı kuramaz.
 
 ## Dokümantasyon
 

@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 
 import { DateTimePicker } from '@/components/DateTimePicker';
 import { CourseChipRow } from '@/components/CourseChipRow';
@@ -40,6 +41,8 @@ type ReminderFilter = 'open' | 'past' | 'done' | 'all';
 
 export default function TrackScreen() {
   const c = useColors();
+  const params = useLocalSearchParams<{ ders?: string | string[] }>();
+  const courseParam = Array.isArray(params.ders) ? params.ders[0] : params.ders;
   const [tab, setTab] = useState<'hatirlatma' | 'devamsizlik'>('hatirlatma');
   const [reminderFilter, setReminderFilter] = useState<ReminderFilter>('open');
 
@@ -91,12 +94,22 @@ export default function TrackScreen() {
 
   const [editingReminderId, setEditingReminderId] = useState<number | null>(null);
   const [title, setTitle] = useState('');
+  const [linkedCourse, setLinkedCourse] = useState('');
   const [kind, setKind] = useState<ReminderKind>('sinav');
   const [date, setDate] = useState(toDateInput());
   const [time, setTime] = useState('09:00');
 
   const [editingAttendanceId, setEditingAttendanceId] = useState<number | null>(null);
   const [courseName, setCourseName] = useState('');
+
+  useEffect(() => {
+    if (courseParam?.trim()) {
+      setTab('hatirlatma');
+      setLinkedCourse(courseParam.trim());
+      setTitle(`${courseParam.trim()} hatırlatması`);
+    }
+  }, [courseParam]);
+
   const [limit, setLimit] = useState('4');
 
   const kindAccent = kind === 'sinav' ? c.warning : c.blue;
@@ -105,6 +118,7 @@ export default function TrackScreen() {
   const resetReminderForm = () => {
     setEditingReminderId(null);
     setTitle('');
+    setLinkedCourse('');
     setKind('sinav');
     setDate(toDateInput());
     setTime('09:00');
@@ -133,8 +147,18 @@ export default function TrackScreen() {
     }
     const result =
       editingReminderId !== null
-        ? await updateReminder(editingReminderId, { title: name, kind, dueAt })
-        : await addReminder({ title: name, kind, dueAt });
+        ? await updateReminder(editingReminderId, {
+            title: name,
+            kind,
+            dueAt,
+            courseName: linkedCourse.trim() || name,
+          })
+        : await addReminder({
+            title: name,
+            kind,
+            dueAt,
+            courseName: linkedCourse.trim() || name,
+          });
     resetReminderForm();
     hapticSuccess();
     if (!result.notified) {
@@ -223,8 +247,21 @@ export default function TrackScreen() {
                     onChangeText={setTitle}
                     placeholder={kind === 'sinav' ? 'Matematik vize' : 'Proje teslimi'}
                   />
+                  <Field
+                    label="Bağlı ders (isteğe bağlı)"
+                    value={linkedCourse}
+                    onChangeText={setLinkedCourse}
+                    placeholder="Ders adı — ders merkezinde görünür"
+                  />
                   {courseSuggestions.length > 0 ? (
-                    <CourseChipRow names={courseSuggestions} selected={title} onSelect={setTitle} />
+                    <CourseChipRow
+                      names={courseSuggestions}
+                      selected={linkedCourse || title}
+                      onSelect={(name) => {
+                        setLinkedCourse(name);
+                        if (!title.trim()) setTitle(name);
+                      }}
+                    />
                   ) : null}
                   <DateTimePicker
                     date={date}
@@ -290,6 +327,7 @@ export default function TrackScreen() {
                                   const due = new Date(item.dueAt);
                                   setEditingReminderId(item.id);
                                   setTitle(item.title);
+                                  setLinkedCourse(item.courseName);
                                   setKind(item.kind);
                                   setDate(toDateInput(due));
                                   setTime(

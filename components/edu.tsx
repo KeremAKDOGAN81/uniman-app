@@ -687,8 +687,8 @@ export function EduHomeTopBar({
 }) {
   const c = useColors();
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minWidth: 0 }}>
         <View
           style={{
             width: 46,
@@ -699,16 +699,25 @@ export function EduHomeTopBar({
             justifyContent: 'center',
             borderWidth: 2,
             borderColor: `${c.accent}33`,
+            flexShrink: 0,
           }}>
           <Text style={{ fontSize: 22 }}>🎓</Text>
         </View>
-        <View>
-          <Text style={{ color: c.muted, fontSize: 13 }}>{greeting}</Text>
-          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }}>{name}</Text>
-          {subtitle ? <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }}>{subtitle}</Text> : null}
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ color: c.muted, fontSize: 13 }} numberOfLines={1}>
+            {greeting}
+          </Text>
+          <Text style={{ color: c.text, fontSize: 18, fontWeight: '800' }} numberOfLines={1}>
+            {name}
+          </Text>
+          {subtitle ? (
+            <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
+      <View style={{ flexDirection: 'row', gap: 10, flexShrink: 0 }}>
         <Pressable
           onPress={onNotify}
           style={{
@@ -1042,6 +1051,11 @@ export function EduTimelineClassCard({
   tag,
   color,
   onPress,
+  onEdit,
+  onDelete,
+  remindHours,
+  remindOptions,
+  onRemindChange,
 }: {
   timeRange: string;
   title: string;
@@ -1050,6 +1064,11 @@ export function EduTimelineClassCard({
   tag?: string;
   color?: string;
   onPress?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  remindHours?: number;
+  remindOptions?: { hours: number; label: string }[];
+  onRemindChange?: (hours: number) => void;
 }) {
   const c = useColors();
   const fill = color ?? c.accent;
@@ -1075,6 +1094,84 @@ export function EduTimelineClassCard({
           </View>
         ) : null}
       </View>
+      {remindOptions && onRemindChange ? (
+        <View
+          style={{
+            gap: 8,
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(255,255,255,0.22)',
+          }}>
+          <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: '700' }}>Bu ders için hatırlat</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {remindOptions.map((option) => {
+              const selected = (remindHours ?? 0) === option.hours;
+              return (
+                <Pressable
+                  key={option.hours}
+                  onPress={() => {
+                    hapticSelect();
+                    onRemindChange(option.hours);
+                  }}
+                  style={{
+                    backgroundColor: selected ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.18)',
+                    borderRadius: 999,
+                    paddingHorizontal: 14,
+                    paddingVertical: 8,
+                    borderWidth: 1,
+                    borderColor: selected ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.28)',
+                  }}>
+                  <Text style={{ color: selected ? fill : '#fff', fontWeight: '700', fontSize: 12 }}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      ) : null}
+      {onEdit || onDelete ? (
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: 8,
+            marginTop: 4,
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: 'rgba(255,255,255,0.22)',
+          }}>
+          {onEdit ? (
+            <Pressable
+              onPress={() => {
+                hapticSelect();
+                onEdit();
+              }}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.18)',
+                borderRadius: 14,
+                paddingVertical: 10,
+                alignItems: 'center',
+              })}>
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>Düzenle</Text>
+            </Pressable>
+          ) : null}
+          {onDelete ? (
+            <Pressable
+              onPress={() => {
+                hapticSelect();
+                onDelete();
+              }}
+              style={({ pressed }) => ({
+                flex: 1,
+                backgroundColor: pressed ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.18)',
+                borderRadius: 14,
+                paddingVertical: 10,
+                alignItems: 'center',
+              })}>
+              <Text style={{ color: '#FFE4E4', fontWeight: '800', fontSize: 13 }}>Sil</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </FauxGradient>
   );
   if (!onPress) return card;

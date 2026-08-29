@@ -126,6 +126,10 @@ export default function CalculatorScreen() {
       name: name.trim() || 'İsimsiz Ders',
       yearPoints: Number(calc.yearPoints.toFixed(1)),
       requiredFinal: calc.requiredFinal,
+      passing: parseNum(passing, 60),
+      midtermScore: parseNum(midterm),
+      midtermWeight: parseNum(midtermWeight),
+      extras: extrasParsed,
     };
     if (editingTargetId !== null) {
       await updateExamTarget(editingTargetId, payload);
@@ -318,6 +322,16 @@ export default function CalculatorScreen() {
                         onPress={() => {
                           setEditingTargetId(item.id);
                           setName(item.name);
+                          setPassing(String(item.passing));
+                          setMidterm(String(item.midtermScore));
+                          setMidtermWeight(String(item.midtermWeight));
+                          setExtras(
+                            item.extras.map((extra, index) => ({
+                              id: `${item.id}-extra-${index}`,
+                              score: String(extra.score),
+                              weight: String(extra.weight),
+                            }))
+                          );
                           setResultText(null);
                           setRequiredFinal(null);
                         }}

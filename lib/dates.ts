@@ -2,6 +2,30 @@ import { WEEKDAYS, type ScheduleItem, type Weekday } from '@/lib/types';
 
 const ALL_DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
+export function getWeekDayStrip(now = new Date()): {
+  key: Weekday;
+  label: string;
+  dayNum: number;
+  isToday: boolean;
+}[] {
+  const dayIndex = now.getDay();
+  const monday = new Date(now);
+  const diffToMonday = dayIndex === 0 ? -6 : 1 - dayIndex;
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() + diffToMonday);
+
+  return WEEKDAYS.map((key, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    return {
+      key,
+      label: key.slice(0, 3),
+      dayNum: date.getDate(),
+      isToday: date.toDateString() === now.toDateString(),
+    };
+  });
+}
+
 export function todayWeekday(): Weekday | null {
   const name = ALL_DAYS[new Date().getDay()];
   return WEEKDAYS.includes(name as Weekday) ? (name as Weekday) : null;
@@ -80,8 +104,8 @@ export function formatDurationMinutes(total: number): string {
   const hours = Math.floor((total % (60 * 24)) / 60);
   const minutes = total % 60;
   if (days > 0) return hours > 0 ? `${days} gün ${hours} saat` : `${days} gün`;
-  if (hours > 0) return minutes > 0 ? `${hours} saat ${minutes} dk` : `${hours} saat`;
-  return `${minutes} dk`;
+  if (hours > 0) return minutes > 0 ? `${hours} saat ${minutes} dakika` : `${hours} saat`;
+  return `${minutes} dakika`;
 }
 
 export function formatCountdown(iso: string, now = new Date()): string {

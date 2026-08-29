@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import {
@@ -20,6 +20,7 @@ import { hrefForSwipeTab } from '@/constants/swipeTabs';
 import { useClock } from '@/hooks/useClock';
 import { buildCourseCatalog } from '@/lib/courseCatalog';
 import { eduCardShadow, emojiForCourse, progressToneForColor } from '@/lib/courseColor';
+import { buildMorningSummary } from '@/lib/morningSummary';
 import {
   formatCountdown,
   formatDateTime,
@@ -32,7 +33,9 @@ import {
 } from '@/lib/dates';
 import { computeWeeklySummary, findNextExam } from '@/lib/homeInsights';
 import { displayName, profileSubtitle } from '@/lib/profile';
+import { findFreeHoursToday } from '@/lib/freeHours';
 import { computeGpa100, computeGpa4, formatGpa } from '@/lib/gpa';
+import { filterCoursesBySemester } from '@/lib/semester';
 import type { Reminder, ScheduleItem } from '@/lib/types';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -40,16 +43,14 @@ function classDuration(item: ScheduleItem): string {
   const start = minutesFromClock(item.startTime);
   const end = minutesFromClock(item.endTime);
   if (start === null || end === null || end <= start) return '—';
-  const mins = end - start;
-  if (mins >= 60) return `${Math.floor(mins / 60)}s ${mins % 60}dk`;
-  return `${mins} dk`;
+  return formatDurationMinutes(end - start);
 }
 
 function courseBadges(entry: ReturnType<typeof buildCourseCatalog>[number]): string[] {
   const badges: string[] = [];
   if (entry.scheduleCount > 0) badges.push('Program');
   if (entry.hasGrade) badges.push(entry.gradeLetter ?? 'AGNO');
-  if (entry.hasAttendance) badges.push('Devam');
+  if (entry.hasAttendance) badges.push('Devamsızlık');
   if (entry.hasExamTarget) badges.push('Final');
   if (entry.noteCount > 0) badges.push(`${entry.noteCount} not`);
   return badges.length > 0 ? badges : ['Ders'];
@@ -63,16 +64,32 @@ export default function HomeScreen() {
   const attendance = useAppStore((state) => state.attendance);
   const examTargets = useAppStore((state) => state.examTargets);
   const notes = useAppStore((state) => state.notes);
+  const activeSemester = useAppStore((state) => state.activeSemester);
   const profile = useAppStore((state) => state.profile);
   const router = useRouter();
-  const now = useClock(15000);
+  const now = useClock(30000);
   const today = todayWeekday();
   const todaysClasses = today ? schedule.filter((item) => item.weekday === today) : [];
   const { current, next } = pickNowAndNext(todaysClasses, now);
   const openReminders = reminders.filter((item) => !item.done);
   const greeting = useMemo(() => greetingForHour(now.getHours()), [now]);
-  const gpa4 = computeGpa4(courses);
-  const joinedToday = todaysClasses.length ? Math.min(todaysClasses.length, Math.max(1, todaysClasses.indexOf(current ?? next ?? todaysClasses[0]) + 1)) : 0;
+  const semesterCourses = useMemo(
+    () => filterCoursesBySemester(courses, activeSemester),
+    [courses, activeSemester]
+  );
+  const gpa4 = computeGpa4(semesterCourses);
+  const joinedToday = useMemo(() => {
+    if (todaysClasses.length === 0) return 0;
+    if (current) {
+      const idx = todaysClasses.indexOf(current);
+      return idx >= 0 ? idx + 1 : todaysClasses.length;
+    }
+    if (next) {
+      const idx = todaysClasses.indexOf(next);
+      return idx >= 0 ? idx : 1;
+    }
+    return todaysClasses.length;
+  }, [todaysClasses, current, next]);
 
   const weeklySummary = useMemo(
     () =>
@@ -80,13 +97,20 @@ export default function HomeScreen() {
         scheduleCount: schedule.length,
         reminders,
         attendance,
-        courses,
+        courses: semesterCourses,
         now,
       }),
-    [schedule.length, reminders, attendance, courses, now]
+    [schedule.length, reminders, attendance, semesterCourses, now]
   );
 
   const nextExam = useMemo(() => findNextExam(reminders, now), [reminders, now]);
+
+  const freeSlots = useMemo(() => findFreeHoursToday(schedule), [schedule]);
+
+  const morningSummary = useMemo(
+    () => buildMorningSummary(schedule, reminders, now),
+    [schedule, reminders, now]
+  );
 
   const catalog = useMemo(
     () => buildCourseCatalog({ courses, schedule, attendance, examTargets, notes, reminders }),
@@ -253,6 +277,27 @@ export default function HomeScreen() {
           onPress={hero.action}
         />
 
+        {schedule.length > 0 ? (
+          <Pressable
+            onPress={() => router.push('/weekly-report' as never)}
+            style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}>
+            <View
+              style={{
+                backgroundColor: c.card,
+                borderRadius: 28,
+                padding: 18,
+                borderWidth: 1,
+                borderColor: c.line,
+                gap: 6,
+                ...eduCardShadow,
+              }}>
+              <Text style={{ color: c.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>BUGÜN</Text>
+              <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', lineHeight: 22 }}>{morningSummary.title}</Text>
+              <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20 }}>{morningSummary.body}</Text>
+            </View>
+          </Pressable>
+        ) : null}
+
         {schedule.length > 0 || courses.length > 0 || openReminders.length > 0 ? (
           <EduWeeklySummaryCard line={weeklySummary.line} />
         ) : null}
@@ -270,8 +315,8 @@ export default function HomeScreen() {
                   badges={courseBadges(entry)}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/notes',
-                      params: { ders: entry.name },
+                      pathname: '/course',
+                      params: { name: entry.name },
                     } as never)
                   }
                 />
@@ -281,7 +326,7 @@ export default function HomeScreen() {
         ) : null}
 
         <EduSectionTitle
-          title="Devam eden dersler"
+          title="Bugünkü dersler"
           action="Tümü"
           onAction={() => router.navigate(hrefForSwipeTab('schedule') as never)}
         />
@@ -301,7 +346,7 @@ export default function HomeScreen() {
           ))}
         </ScrollView>
 
-        {courses.length > 0 ? (
+        {semesterCourses.length > 0 ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <View
               style={{
@@ -315,7 +360,9 @@ export default function HomeScreen() {
               }}>
               <Text style={{ color: c.muted, fontSize: 12, fontWeight: '700' }}>AGNO</Text>
               <Text style={{ color: c.text, fontSize: 28, fontWeight: '900', marginTop: 4 }}>{formatGpa(gpa4)}</Text>
-              <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }}>{formatGpa(computeGpa100(courses), 1)} / 100</Text>
+              <Text style={{ color: c.muted, fontSize: 12, marginTop: 2 }}>
+                {formatGpa(computeGpa100(semesterCourses), 1)} / 100 · {activeSemester}
+              </Text>
             </View>
             <View
               style={{
@@ -350,7 +397,31 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        <EduPurpleBar label="Program zaman çizelgesi" onPress={() => router.navigate(hrefForSwipeTab('schedule') as never)} />
+        {freeSlots.length > 0 ? (
+          <View style={{ gap: 8 }}>
+            <EduSectionTitle title="Boş saatlerin" action="Odak" onAction={() => router.push('/focus' as never)} />
+            {freeSlots.slice(0, 3).map((slot) => (
+              <EduListRow
+                key={`${slot.startTime}-${slot.endTime}`}
+                emoji="☕"
+                title={`${slot.startTime} – ${slot.endTime}`}
+                subtitle={`${formatDurationMinutes(slot.durationMinutes)} boş — odak başlat`}
+                accent={c.teal}
+                onPress={() =>
+                  router.push({
+                    pathname: '/focus',
+                    params: { minutes: String(Math.min(slot.durationMinutes, 45)) },
+                  } as never)
+                }
+              />
+            ))}
+          </View>
+        ) : null}
+
+        <View style={{ gap: 8 }}>
+          <EduPurpleBar label="Haftalık rapor" onPress={() => router.push('/weekly-report' as never)} />
+          <EduPurpleBar label="Program zaman çizelgesi" onPress={() => router.navigate(hrefForSwipeTab('schedule') as never)} />
+        </View>
       </ScrollView>
     </SwipeTabShell>
   );

@@ -57,6 +57,8 @@ export function BackupCard() {
     const json = stringifyBackup({
       theme: state.theme,
       profile: state.profile,
+      activeSemester: state.activeSemester,
+      morningSummaryEnabled: state.morningSummaryEnabled,
       courses: state.courses,
       schedule: state.schedule,
       reminders: state.reminders,

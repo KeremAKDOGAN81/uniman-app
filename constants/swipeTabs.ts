@@ -1,9 +1,9 @@
 export const SWIPE_TABS = [
-  { key: 'index', title: 'Ana Sayfa', href: '/(tabs)/' },
-  { key: 'schedule', title: 'Program', href: '/(tabs)/schedule' },
-  { key: 'calculator', title: 'Hesap', href: '/(tabs)/calculator' },
-  { key: 'notes', title: 'Notlar', href: '/(tabs)/notes' },
-  { key: 'track', title: 'Takip', href: '/(tabs)/track' },
+  { key: 'index', title: 'Ana Sayfa', subtitle: 'Günün özeti ve derslerin', href: '/(tabs)/' },
+  { key: 'schedule', title: 'Program', subtitle: 'Haftalık ders saatleri', href: '/(tabs)/schedule' },
+  { key: 'calculator', title: 'Hesap', subtitle: 'Not ortalaması ve final', href: '/(tabs)/calculator' },
+  { key: 'notes', title: 'Notlar', subtitle: 'Ders notları ve etiketler', href: '/(tabs)/notes' },
+  { key: 'track', title: 'Takip', subtitle: 'Hatırlatmalar ve devamsızlık', href: '/(tabs)/track' },
 ] as const;
 
 export type SwipeTabKey = (typeof SWIPE_TABS)[number]['key'];

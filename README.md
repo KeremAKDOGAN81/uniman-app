@@ -8,24 +8,36 @@ Offline-first student assistant for schedule, GPA, final targets, notes, and rem
 
 ## Highlights
 
-- **Colorful Edu UI** — rounded cards, gradients, per-course colors (assigned automatically from course name).
-- **Swipe tabs** — five main screens; switch with horizontal swipe or header arrows (no bottom tab bar).
-- **Onboarding** — short intro, then profile setup (name, department, optional university/class). App unlocks after profile is saved.
+- **Colorful Edu UI** — rounded cards, gradients, per-course colors (from course name).
+- **Swipe tabs** — five main screens; swipe the header, tap dots, or use arrows (no bottom tab bar).
+- **Course hub** — tap a course on Home for schedule, grades, attendance, notes, and quick actions.
+- **Morning summary** — daily 07:30 local notification + Today card on Home.
+- **Weekly report & focus mode** — week overview screen and Pomodoro-style focus timer from free slots.
+- **Onboarding** — short intro, then profile (name, department). App unlocks after profile is saved.
 - **Privacy** — data never leaves the phone unless you export a JSON backup.
 
 ## Screens
 
 | Tab | What it does |
 |-----|----------------|
-| **Home** | Greeting with your name, next exam countdown, today’s classes (now / next), weekly summary, unified **My courses**, GPA & open reminders. |
-| **Schedule** | Mon–Fri timetable, class reminders (1 / 2 / 3 h before), share week as text, link a class to AGNO or attendance. |
-| **Calc** | **Final** pane: required final score from midterm + weighted activities. **AGNO** pane: semester GPA (4.00 and 100-point). Stat tiles show last result or *Not calculated*. |
-| **Notes** | Notes tagged by course, search & filter by tag; open from schedule with course prefilled. |
-| **Track** | Exam/homework reminders (local notifications) and attendance limits with progress bars. |
+| **Home** | Greeting, next exam, today’s classes, morning summary, weekly summary, **My courses**, semester AGNO, free hours, links to weekly report. |
+| **Schedule** | Day / week view, Mon–Fri timetable, class reminders (1 / 2 / 3 h before), share week as text. |
+| **Calc** | **Final:** required score from midterm + weighted activities. **AGNO:** semester GPA (4.00 and 100-point), filtered by active semester in Settings. |
+| **Notes** | Course-tagged notes, markdown preview, optional photo, pin, search & filter. |
+| **Track** | Exam/homework reminders (local notifications) and attendance limits. |
+
+### Extra routes
+
+| Screen | What it does |
+|--------|----------------|
+| **Course hub** | Per-course dashboard: quick add note, bump attendance, final calc, reminder, focus mode. |
+| **Weekly report** | Generated summary: exams, attendance warnings, free hours, semester AGNO. |
+| **Focus** | 25 / 45 / 15 minute timer for study sessions. |
+| **Settings** | Profile, active semester, theme, notifications, morning summary toggle, backup. |
 
 ## Course linking
 
-Course names are shared across schedule, AGNO, attendance, notes, and final targets via a single catalog (`lib/courseCatalog.ts`). Adding a class can prompt linking it to AGNO or attendance; chips suggest existing course names everywhere.
+Course names are shared across schedule, AGNO, attendance, notes, and final targets via `lib/courseCatalog.ts`. Chips suggest existing names; course hub ties everything together.
 
 ## Architecture
 
@@ -36,41 +48,40 @@ Expo Router screens
   → expo-notifications (local only)
 ```
 
-Business logic: `lib/gpa.ts`, `lib/finalGrade.ts`, `lib/homeInsights.ts`, `lib/copy.ts`, `lib/profile.ts`, `lib/shareSchedule.ts`.
-
-UI building blocks: `components/edu.tsx`, `components/SwipeTabShell.tsx`.
+Key modules: `lib/gpa.ts`, `lib/finalGrade.ts`, `lib/morningSummary.ts`, `lib/weeklyReport.ts`, `lib/freeHours.ts`, `components/SwipeTabShell.tsx`, `components/edu.tsx`.
 
 ## Backup
 
-Settings → export JSON (courses, schedule, reminders, notes, profile, theme). Import replaces on-device data after confirmation.
+Settings → export JSON (courses, schedule, reminders, notes, exam targets, attendance, profile, theme, **active semester**, **morning summary**). Import replaces on-device data after confirmation. Note photo URIs are device-local and may not work after import on another phone.
 
 ## Run locally
 
-Requires JDK 17, Android SDK, and a device or emulator. First native build:
+Requires JDK 17, Android SDK, and a device or emulator.
+
+**First install / after adding native modules** (e.g. photo picker):
 
 ```bash
 npm install
 npx expo run:android
 ```
 
-Daily JS development:
+**Daily JS development** (dev client already on device/emulator):
 
 ```bash
 npm start
-# or: npx expo start --dev-client
 ```
 
-Rebuild native code only after adding a native module.
+Reload: Metro terminal `r`, or emulator **Ctrl+M → Reload**.
 
 ## Sideload APK (Android)
 
-Install the preview `.apk` from EAS (not a Windows `.exe`):
+Standalone preview APK (no dev client):
 
 ```bash
 npx eas-cli build --platform android --profile preview
 ```
 
-When the build finishes, download the APK from the Expo page, copy it to the phone, and install (allow unknown sources if prompted). iPhone cannot install this APK.
+Download the APK from the Expo build page, copy to the phone, install (allow unknown sources). iPhone cannot install this APK.
 
 ## Docs
 

@@ -13,6 +13,20 @@ export type Course = {
   letter: LetterGrade;
   points: number;
   score100: number | null;
+  semester: string;
+};
+
+export type ExamExtra = { score: number; weight: number };
+
+export type ExamTarget = {
+  id: number;
+  name: string;
+  yearPoints: number;
+  requiredFinal: number;
+  passing: number;
+  midtermScore: number;
+  midtermWeight: number;
+  extras: ExamExtra[];
 };
 
 export type RemindHours = 0 | 1 | 2 | 3;
@@ -51,13 +65,7 @@ export type Reminder = {
   dueAt: string;
   notificationId: string | null;
   done: boolean;
-};
-
-export type ExamTarget = {
-  id: number;
-  name: string;
-  yearPoints: number;
-  requiredFinal: number;
+  courseName: string;
 };
 
 export type AttendanceItem = {
@@ -73,6 +81,8 @@ export type Note = {
   body: string;
   courseName: string;
   createdAt: string;
+  pinned: boolean;
+  imageUri: string;
 };
 
 export type UserProfile = {

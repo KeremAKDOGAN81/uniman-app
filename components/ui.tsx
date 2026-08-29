@@ -48,11 +48,19 @@ export function Screen({ children, style }: { children: ReactNode; style?: Style
   );
 }
 
-export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export function Card({
+  children,
+  style,
+  animationDelay = 0,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  animationDelay?: number;
+}) {
   const c = useColors();
   return (
     <Animated.View
-      entering={FadeInDown.duration(240)}
+      entering={FadeInDown.delay(animationDelay).duration(300).springify().damping(20).stiffness(240)}
       layout={LinearTransition.duration(200)}
       style={[
         {
@@ -99,6 +107,8 @@ export function PrimaryButton({
 
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
       onPress={() => {
         if (disabled) return;
         hapticSelect();

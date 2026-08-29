@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 import { palettes } from '@/constants/theme';
 import { configureNotifications } from '@/lib/notifications';
 import { useAppStore } from '@/store/useAppStore';
+import { ToastHost } from '@/components/ToastHost';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -82,12 +83,36 @@ export default function RootLayout() {
       <ThemeProvider value={navTheme}>
         <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         <OnboardingGate>
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="settings" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="privacy" options={{ presentation: 'modal' }} />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: c.bg },
+              animation: 'default',
+            }}>
+            <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+            <Stack.Screen
+              name="settings"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+                fullScreenGestureEnabled: true,
+              }}
+            />
+            <Stack.Screen
+              name="privacy"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen name="course" options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+            <Stack.Screen name="focus" options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+            <Stack.Screen name="weekly-report" options={{ animation: 'slide_from_right', gestureEnabled: true }} />
             <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
           </Stack>
+          <ToastHost />
         </OnboardingGate>
       </ThemeProvider>
     </GestureHandlerRootView>

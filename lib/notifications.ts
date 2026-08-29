@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import type { RemindHours, ReminderKind, Weekday } from '@/lib/types';
 
 const CHANNEL_ID = 'uniman-reminders';
+export const MORNING_SUMMARY_NOTIFICATION_ID = 'uniman-morning-summary';
 
 const EXPO_WEEKDAY: Record<Weekday, number> = {
   Pazartesi: 2,
@@ -127,4 +128,38 @@ export async function cancelReminderNotification(id: string | null): Promise<voi
   } catch {
     // Already fired or missing — ignore.
   }
+}
+
+export async function cancelMorningSummaryNotification(): Promise<void> {
+  await cancelReminderNotification(MORNING_SUMMARY_NOTIFICATION_ID);
+}
+
+export async function scheduleMorningSummaryNotification(input: {
+  title: string;
+  body: string;
+  hour?: number;
+  minute?: number;
+}): Promise<string | null> {
+  const allowed = await ensureNotificationPermission();
+  if (!allowed) return null;
+
+  await cancelMorningSummaryNotification();
+
+  const hour = input.hour ?? 7;
+  const minute = input.minute ?? 30;
+
+  return Notifications.scheduleNotificationAsync({
+    identifier: MORNING_SUMMARY_NOTIFICATION_ID,
+    content: {
+      title: input.title,
+      body: input.body,
+      sound: 'default',
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
+      hour,
+      minute,
+      channelId: CHANNEL_ID,
+    },
+  });
 }

@@ -33,37 +33,37 @@ import { useAppStore } from '@/store/useAppStore';
 
 const { width } = Dimensions.get('window');
 
-const HASHTAGS = ['Program', 'Mentoring', 'Training', 'Curriculum', 'Development', 'Enrichment'];
+const HASHTAGS = ['Program', 'AGNO', 'Notlar', 'Hatırlatma', 'Devamsızlık', 'Final'];
 
 const STEPS = [
   {
-    headline: 'Beginner To Expert',
-    title: 'Your Gateway To Unlimited Learning With AI',
-    body: "Join 'UniMan' for unlimited learning — program, AGNO, notlar ve hatırlatmalar tek yerde.",
+    headline: 'Hoş geldin',
+    title: 'Üniversite hayatın tek uygulamada',
+    body: 'Program, AGNO, notlar, hatırlatmalar ve devamsızlık — hepsi cihazında, hesap gerekmez.',
     accent: '#6C5CE7',
   },
   {
     headline: 'Haftanı planla',
-    title: 'Learning Timeline ile derslerini yönet',
-    body: 'Renkli zaman çizelgesi, hafta şeridi ve dersten önce bildirim.',
+    title: 'Ders programını renkli kartlarla yönet',
+    body: 'Haftalık saatler, sınıf bilgisi ve dersten önce bildirim.',
     accent: '#6C5CE7',
   },
   {
     headline: 'Hatırlat',
     title: 'Sınav ve ödevleri kaçırma',
-    body: 'Yerel bildirimlerle sınav ve ödev tarihlerini takip et.',
+    body: 'Yerel bildirimlerle tarihleri takip et.',
     accent: '#FF9F1C',
   },
   {
-    headline: 'AGNO & Final',
+    headline: 'AGNO ve final',
     title: 'Hedefini net gör',
     body: 'Final hesabı ve dönem ortalaması canlı güncellenir.',
     accent: '#22C55E',
   },
   {
     headline: 'Hazırsın',
-    title: 'Kaydırarak keşfet',
-    body: 'Üst oklar veya yatay kaydırma ile sekmeler arasında geç.',
+    title: 'Kaydırarak gez',
+    body: 'Sekmeler arasında sağa-sola kaydır veya üst okları kullan.',
     accent: '#E879F9',
   },
 ] as const;
@@ -136,7 +136,7 @@ export default function OnboardingScreen() {
 
   if (phase === 'profile') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#F3F4F8' }} edges={['top', 'bottom']}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top', 'bottom']}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <ScrollView
             contentContainerStyle={{ flexGrow: 1, paddingHorizontal: 22, paddingBottom: 28 }}
@@ -185,7 +185,7 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F3F4F8' }} edges={['top', 'bottom']}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top', 'bottom']}>
       <View style={{ flex: 1, paddingHorizontal: 22, paddingBottom: 20 }}>
         <Animated.View entering={FadeIn.duration(300)} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

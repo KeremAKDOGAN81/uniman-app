@@ -18,6 +18,10 @@ import {
   getIntroDone,
   getOnboardingDone,
   getUserProfile,
+  getActiveSemester,
+  getMorningSummaryEnabled,
+  setActiveSemester as persistActiveSemester,
+  setMorningSummaryEnabled as persistMorningSummaryEnabled,
   initDb,
   insertAttendance,
   insertAttendanceFull,
@@ -40,15 +44,19 @@ import {
   updateReminderNotification,
   updateScheduleItem as updateScheduleItemRow,
   updateScheduleReminder,
+  setNotePinned,
   wipeUserTables,
 } from '@/lib/database';
 import { isProfileComplete } from '@/lib/profile';
 import { colorForCourseName } from '@/lib/courseColor';
 import { hasAttendanceForName, hasGradeForName } from '@/lib/courseCatalog';
 import { letterFromScore } from '@/lib/gpa';
+import { buildMorningSummary } from '@/lib/morningSummary';
 import {
+  cancelMorningSummaryNotification,
   cancelReminderNotification,
   scheduleClassReminderNotification,
+  scheduleMorningSummaryNotification,
   scheduleReminderNotification,
 } from '@/lib/notifications';
 import { WEEKDAYS } from '@/lib/types';
@@ -79,8 +87,13 @@ type AppState = {
   examTargets: ExamTarget[];
   attendance: AttendanceItem[];
   notes: Note[];
+  activeSemester: string;
+  morningSummaryEnabled: boolean;
   hydrate: () => Promise<void>;
+  refreshMorningSummary: () => Promise<void>;
+  setMorningSummaryEnabled: (enabled: boolean) => Promise<void>;
   setTheme: (theme: ThemeName) => Promise<void>;
+  setActiveSemester: (value: string) => Promise<void>;
   toggleTheme: () => Promise<void>;
   completeIntro: () => Promise<void>;
   saveProfile: (input: UserProfile) => Promise<void>;
@@ -128,10 +141,11 @@ type AppState = {
     title: string;
     kind: ReminderKind;
     dueAt: Date;
+    courseName?: string;
   }) => Promise<{ notified: boolean }>;
   updateReminder: (
     id: number,
-    input: { title: string; kind: ReminderKind; dueAt: Date }
+    input: { title: string; kind: ReminderKind; dueAt: Date; courseName?: string }
   ) => Promise<{ notified: boolean }>;
   toggleReminder: (id: number) => Promise<void>;
   removeReminder: (id: number) => Promise<void>;
@@ -139,26 +153,55 @@ type AppState = {
     name: string;
     yearPoints: number;
     requiredFinal: number;
+    passing?: number;
+    midtermScore?: number;
+    midtermWeight?: number;
+    extras?: { score: number; weight: number }[];
   }) => Promise<void>;
   updateExamTarget: (
     id: number,
-    input: { name: string; yearPoints: number; requiredFinal: number }
+    input: {
+      name: string;
+      yearPoints: number;
+      requiredFinal: number;
+      passing?: number;
+      midtermScore?: number;
+      midtermWeight?: number;
+      extras?: { score: number; weight: number }[];
+    }
   ) => Promise<void>;
   removeExamTarget: (id: number) => Promise<void>;
   addAttendance: (input: { name: string; limit: number }) => Promise<void>;
   updateAttendance: (id: number, input: { name: string; limit: number }) => Promise<void>;
   bumpAttendance: (id: number, delta: number) => Promise<void>;
   removeAttendance: (id: number) => Promise<void>;
-  addNote: (input: { title: string; body: string; courseName?: string }) => Promise<void>;
-  updateNote: (id: number, input: { title: string; body: string; courseName?: string }) => Promise<void>;
+  addNote: (input: { title: string; body: string; courseName?: string; imageUri?: string }) => Promise<void>;
+  updateNote: (
+    id: number,
+    input: { title: string; body: string; courseName?: string; imageUri?: string }
+  ) => Promise<void>;
   removeNote: (id: number) => Promise<void>;
+  toggleNotePinned: (id: number) => Promise<void>;
   ensureAttendanceForCourse: (name: string, limit?: number) => Promise<void>;
   ensureGradeForCourse: (name: string, ects?: number) => Promise<void>;
   importBackup: (raw: string) => Promise<void>;
 };
 
+async function syncMorningSummary(input: {
+  schedule: ScheduleItem[];
+  reminders: Reminder[];
+  enabled: boolean;
+}) {
+  if (!input.enabled) {
+    await cancelMorningSummaryNotification();
+    return;
+  }
+  const summary = buildMorningSummary(input.schedule, input.reminders);
+  await scheduleMorningSummaryNotification({ title: summary.title, body: summary.body });
+}
+
 async function loadAll() {
-  const [courses, schedule, reminders, examTargets, attendance, notes, theme, onboardingDone, introDone, profile] =
+  const [courses, schedule, reminders, examTargets, attendance, notes, theme, onboardingDone, introDone, profile, activeSemester, morningSummaryEnabled] =
     await Promise.all([
       getCourses(),
       getSchedule(),
@@ -170,6 +213,8 @@ async function loadAll() {
       getOnboardingDone(),
       getIntroDone(),
       getUserProfile(),
+      getActiveSemester(),
+      getMorningSummaryEnabled(),
     ]);
   const profileComplete = isProfileComplete(profile);
   return {
@@ -184,6 +229,8 @@ async function loadAll() {
     introDone: introDone || onboardingDone,
     profile,
     profileComplete,
+    activeSemester,
+    morningSummaryEnabled,
   };
 }
 
@@ -200,15 +247,40 @@ export const useAppStore = create<AppState>((set, get) => ({
   examTargets: [],
   attendance: [],
   notes: [],
+  activeSemester: '2025-2026 Güz',
+  morningSummaryEnabled: true,
 
   hydrate: async () => {
     await initDb();
-    set({ ...(await loadAll()), ready: true });
+    const data = await loadAll();
+    set({ ...data, ready: true });
+    await syncMorningSummary({
+      schedule: data.schedule,
+      reminders: data.reminders,
+      enabled: data.morningSummaryEnabled,
+    });
+  },
+
+  refreshMorningSummary: async () => {
+    const { schedule, reminders, morningSummaryEnabled } = get();
+    await syncMorningSummary({ schedule, reminders, enabled: morningSummaryEnabled });
+  },
+
+  setMorningSummaryEnabled: async (enabled) => {
+    await persistMorningSummaryEnabled(enabled);
+    set({ morningSummaryEnabled: enabled });
+    await get().refreshMorningSummary();
   },
 
   setTheme: async (theme) => {
     await setSetting('theme', theme);
     set({ theme });
+  },
+
+  setActiveSemester: async (value) => {
+    const trimmed = value.trim() || '2025-2026 Güz';
+    await persistActiveSemester(trimmed);
+    set({ activeSemester: trimmed });
   },
 
   toggleTheme: async () => {
@@ -288,6 +360,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       schedule: [...get().schedule, item].sort((a, b) => a.startTime.localeCompare(b.startTime)),
     });
+    await get().refreshMorningSummary();
     return { notified: remindHours === 0 || Boolean(notificationId) };
   },
 
@@ -298,6 +371,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     await deleteScheduleItem(id);
     set({ schedule: get().schedule.filter((item) => item.id !== id) });
+    await get().refreshMorningSummary();
   },
 
   updateScheduleItem: async (id, input) => {
@@ -348,6 +422,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         )
         .sort((a, b) => a.startTime.localeCompare(b.startTime)),
     });
+    await get().refreshMorningSummary();
     return { notified: remindHours === 0 || Boolean(notificationId) };
   },
 
@@ -385,10 +460,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       kind: input.kind,
       dueAt: input.dueAt.toISOString(),
       notificationId,
+      courseName: input.courseName,
     });
     set({
       reminders: [...get().reminders, reminder].sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
     });
+    await get().refreshMorningSummary();
     return { notified: Boolean(notificationId) };
   },
 
@@ -419,6 +496,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         item.id === id ? { ...item, done: nextDone, notificationId } : item
       ),
     });
+    await get().refreshMorningSummary();
   },
 
   removeReminder: async (id) => {
@@ -428,6 +506,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     await deleteReminder(id);
     set({ reminders: get().reminders.filter((item) => item.id !== id) });
+    await get().refreshMorningSummary();
   },
 
   updateReminder: async (id, input) => {
@@ -447,6 +526,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       kind: input.kind,
       dueAt: input.dueAt.toISOString(),
       notificationId,
+      courseName: input.courseName ?? current.courseName,
     });
     set({
       reminders: get()
@@ -458,11 +538,13 @@ export const useAppStore = create<AppState>((set, get) => ({
                 kind: input.kind,
                 dueAt: input.dueAt.toISOString(),
                 notificationId,
+                courseName: input.courseName?.trim() ?? item.courseName,
               }
             : item
         )
         .sort((a, b) => a.dueAt.localeCompare(b.dueAt)),
     });
+    await get().refreshMorningSummary();
     return { notified: Boolean(notificationId) || current.done };
   },
 
@@ -478,9 +560,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         item.id === id
           ? {
               ...item,
-              name: input.name,
-              yearPoints: input.yearPoints,
-              requiredFinal: input.requiredFinal,
+              ...input,
+              extras: input.extras ?? item.extras,
             }
           : item
       ),
@@ -540,6 +621,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               title: input.title,
               body: input.body,
               courseName: input.courseName?.trim() ?? note.courseName,
+              imageUri: input.imageUri !== undefined ? input.imageUri : note.imageUri,
             }
           : note
       ),
@@ -549,6 +631,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   removeNote: async (id) => {
     await deleteNote(id);
     set({ notes: get().notes.filter((note) => note.id !== id) });
+  },
+
+  toggleNotePinned: async (id) => {
+    const note = get().notes.find((item) => item.id === id);
+    if (!note) return;
+    const pinned = !note.pinned;
+    await setNotePinned(id, pinned);
+    set({
+      notes: get()
+        .notes.map((item) => (item.id === id ? { ...item, pinned } : item))
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.id - a.id),
+    });
   },
 
   ensureAttendanceForCourse: async (name, limit = 4) => {
@@ -579,12 +673,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       await setOnboardingDone(true);
     }
 
+    if (data.activeSemester?.trim()) {
+      await persistActiveSemester(data.activeSemester);
+    }
+    if (typeof data.morningSummaryEnabled === 'boolean') {
+      await persistMorningSummaryEnabled(data.morningSummaryEnabled);
+    }
+
     for (const course of data.courses) {
       await insertCourse({
         name: course.name,
         ects: course.ects,
         letter: course.letter,
         score100: course.score100,
+        semester: course.semester,
       });
     }
     for (const item of data.schedule) {
@@ -618,6 +720,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         name: target.name,
         yearPoints: target.yearPoints,
         requiredFinal: target.requiredFinal,
+        passing: target.passing,
+        midtermScore: target.midtermScore,
+        midtermWeight: target.midtermWeight,
+        extras: target.extras,
       });
     }
     for (const item of data.attendance) {
@@ -632,6 +738,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         title: note.title,
         body: note.body,
         courseName: note.courseName ?? '',
+        imageUri: note.imageUri,
+        pinned: note.pinned,
       });
     }
     for (const reminder of data.reminders) {
@@ -650,6 +758,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         kind: reminder.kind,
         dueAt: dueAt.toISOString(),
         notificationId,
+        courseName: reminder.courseName,
       });
       if (reminder.done) {
         await setReminderDone(row.id, true);
@@ -657,5 +766,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     set({ ...(await loadAll()), ready: true });
+    await get().refreshMorningSummary();
   },
 }));

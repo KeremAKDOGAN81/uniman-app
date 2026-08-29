@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
 import { CourseChipRow } from '@/components/CourseChipRow';
@@ -29,6 +29,8 @@ import { collectCourseNames } from '@/lib/courseCatalog';
 import { statNoteTags, statNotesTotal } from '@/lib/copy';
 import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
 import { formatDateTime } from '@/lib/dates';
+import { renderMarkdownPreview } from '@/lib/markdownPreview';
+import { pickNoteImage } from '@/lib/pickNoteImage';
 import { hapticSuccess } from '@/lib/haptics';
 import { useAppStore } from '@/store/useAppStore';
 
@@ -45,10 +47,12 @@ export default function NotesScreen() {
   const addNote = useAppStore((state) => state.addNote);
   const updateNote = useAppStore((state) => state.updateNote);
   const removeNote = useAppStore((state) => state.removeNote);
+  const toggleNotePinned = useAppStore((state) => state.toggleNotePinned);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [noteTitle, setNoteTitle] = useState('');
   const [noteBody, setNoteBody] = useState('');
   const [courseName, setCourseName] = useState('');
+  const [imageUri, setImageUri] = useState('');
   const [query, setQuery] = useState('');
   const [courseFilter, setCourseFilter] = useState<string | null>(null);
 
@@ -67,7 +71,7 @@ export default function NotesScreen() {
         note.body.toLowerCase().includes(q) ||
         note.courseName.toLowerCase().includes(q)
       );
-    });
+    }).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.id - a.id);
   }, [notes, query, courseFilter]);
 
   const tagCount = useMemo(() => {
@@ -88,7 +92,13 @@ export default function NotesScreen() {
     setEditingId(null);
     setNoteTitle('');
     setNoteBody('');
+    setImageUri('');
     setCourseName(courseParam?.trim() ?? '');
+  };
+
+  const pickImage = async () => {
+    const uri = await pickNoteImage();
+    if (uri) setImageUri(uri);
   };
 
   const onSave = async () => {
@@ -103,9 +113,9 @@ export default function NotesScreen() {
       return;
     }
     if (editingId !== null) {
-      await updateNote(editingId, { title: heading, body: noteBody.trim(), courseName: tag });
+      await updateNote(editingId, { title: heading, body: noteBody.trim(), courseName: tag, imageUri });
     } else {
-      await addNote({ title: heading, body: noteBody.trim(), courseName: tag });
+      await addNote({ title: heading, body: noteBody.trim(), courseName: tag, imageUri: imageUri || undefined });
     }
     hapticSuccess();
     resetForm();
@@ -172,9 +182,21 @@ export default function NotesScreen() {
                 label="İçerik"
                 value={noteBody}
                 onChangeText={setNoteBody}
-                placeholder="Haftaya quiz: BST dolaşma"
+                placeholder={'## Özet\n- madde\n**kalın** vurgu'}
                 multiline
               />
+              <Muted>**kalın**, ## başlık ve - madde desteklenir.</Muted>
+              {imageUri ? (
+                <Image
+                  source={{ uri: imageUri }}
+                  style={{ width: '100%', height: 180, borderRadius: 16, backgroundColor: c.line }}
+                  resizeMode="cover"
+                />
+              ) : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <GhostButton label={imageUri ? 'Fotoğrafı değiştir' : 'Fotoğraf ekle'} onPress={() => void pickImage()} />
+                {imageUri ? <GhostButton label="Fotoğrafı kaldır" danger onPress={() => setImageUri('')} /> : null}
+              </View>
               <PrimaryButton label={editingId !== null ? 'Güncelle' : 'Notu kaydet'} onPress={onSave} />
               {editingId !== null ? <GhostButton label="Vazgeç" onPress={resetForm} /> : null}
             </EduFormCard>
@@ -219,14 +241,24 @@ export default function NotesScreen() {
                   <EduColorCard
                     key={note.id}
                     accent={accent}
-                    emoji={emojiForCourse(note.courseName || note.title)}
-                    badge={note.courseName.trim() || 'NOT'}
+                    emoji={note.pinned ? '📌' : emojiForCourse(note.courseName || note.title)}
+                    badge={note.pinned ? 'Sabitlendi' : note.courseName.trim() || 'NOT'}
                     title={note.title}
                     subtitle={formatDateTime(note.createdAt)}>
-                    {note.body ? (
-                      <Text style={{ color: c.text, lineHeight: 21, fontSize: 15 }}>{note.body}</Text>
+                    {note.imageUri ? (
+                      <Image
+                        source={{ uri: note.imageUri }}
+                        style={{ width: '100%', height: 180, borderRadius: 16, backgroundColor: c.line }}
+                        resizeMode="cover"
+                      />
                     ) : null}
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    {note.body ? (
+                      <View style={{ gap: 2 }}>
+                        {renderMarkdownPreview(note.body, { color: c.text, fontSize: 15 }, { color: c.muted, fontSize: 15, lineHeight: 21 })}
+                      </View>
+                    ) : null}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+                      <GhostButton label={note.pinned ? 'Sabiti kaldır' : 'Sabitle'} onPress={() => toggleNotePinned(note.id)} />
                       <GhostButton
                         label="Düzenle"
                         onPress={() => {
@@ -234,6 +266,7 @@ export default function NotesScreen() {
                           setNoteTitle(note.title);
                           setNoteBody(note.body);
                           setCourseName(note.courseName);
+                          setImageUri(note.imageUri ?? '');
                         }}
                       />
                       <GhostButton
