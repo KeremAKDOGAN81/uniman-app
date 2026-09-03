@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import { isLetterGrade, pointsFromLetter } from '@/lib/gpa';
+import { parseMissedDates } from '@/lib/attendance';
 import type {
   AttendanceItem,
   Course,
@@ -145,6 +146,11 @@ async function migrateExtendedColumns(database: SQLite.SQLiteDatabase): Promise<
   }
   if (!noteCols.some((c) => c.name === 'image_uri')) {
     await database.execAsync("ALTER TABLE notes ADD COLUMN image_uri TEXT NOT NULL DEFAULT ''");
+  }
+
+  const attendanceCols = await database.getAllAsync<{ name: string }>('PRAGMA table_info(attendance)');
+  if (!attendanceCols.some((c) => c.name === 'missed_dates')) {
+    await database.execAsync("ALTER TABLE attendance ADD COLUMN missed_dates TEXT NOT NULL DEFAULT '[]'");
   }
 }
 
@@ -499,19 +505,36 @@ export async function updateExamTarget(
   );
 }
 
+function serializeMissedDates(dates: string[]): string {
+  return JSON.stringify(parseMissedDates(dates));
+}
+
+function mapAttendanceRow(row: {
+  id: number;
+  name: string;
+  used: number;
+  max_limit: number;
+  missed_dates?: string | null;
+}): AttendanceItem {
+  const missedDates = parseMissedDates(row.missed_dates);
+  return {
+    id: row.id,
+    name: row.name,
+    used: row.used,
+    limit: row.max_limit,
+    missedDates,
+  };
+}
+
 export async function getAttendance(): Promise<AttendanceItem[]> {
   const rows = await getDb().getAllAsync<{
     id: number;
     name: string;
     used: number;
     max_limit: number;
+    missed_dates?: string | null;
   }>('SELECT * FROM attendance ORDER BY id DESC');
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    used: row.used,
-    limit: row.max_limit,
-  }));
+  return rows.map(mapAttendanceRow);
 }
 
 export async function insertAttendance(input: {
@@ -519,7 +542,7 @@ export async function insertAttendance(input: {
   limit: number;
 }): Promise<AttendanceItem> {
   const result = await getDb().runAsync(
-    'INSERT INTO attendance (name, used, max_limit) VALUES (?, 0, ?)',
+    "INSERT INTO attendance (name, used, max_limit, missed_dates) VALUES (?, 0, ?, '[]')",
     input.name,
     input.limit
   );
@@ -528,11 +551,21 @@ export async function insertAttendance(input: {
     name: input.name,
     used: 0,
     limit: input.limit,
+    missedDates: [],
   };
 }
 
-export async function updateAttendanceUsed(id: number, used: number): Promise<void> {
-  await getDb().runAsync('UPDATE attendance SET used = ? WHERE id = ?', used, id);
+export async function updateAttendanceUsed(
+  id: number,
+  used: number,
+  missedDates: string[] = []
+): Promise<void> {
+  await getDb().runAsync(
+    'UPDATE attendance SET used = ?, missed_dates = ? WHERE id = ?',
+    used,
+    serializeMissedDates(missedDates),
+    id
+  );
 }
 
 export async function deleteAttendance(id: number): Promise<void> {
@@ -543,18 +576,22 @@ export async function insertAttendanceFull(input: {
   name: string;
   used: number;
   limit: number;
+  missedDates?: string[];
 }): Promise<AttendanceItem> {
+  const missedDates = parseMissedDates(input.missedDates ?? []);
   const result = await getDb().runAsync(
-    'INSERT INTO attendance (name, used, max_limit) VALUES (?, ?, ?)',
+    'INSERT INTO attendance (name, used, max_limit, missed_dates) VALUES (?, ?, ?, ?)',
     input.name,
     input.used,
-    input.limit
+    input.limit,
+    serializeMissedDates(missedDates)
   );
   return {
     id: Number(result.lastInsertRowId),
     name: input.name,
     used: input.used,
     limit: input.limit,
+    missedDates,
   };
 }
 
@@ -676,13 +713,14 @@ export async function updateScheduleItem(
 
 export async function updateAttendance(
   id: number,
-  input: { name: string; limit: number; used: number }
+  input: { name: string; limit: number; used: number; missedDates?: string[] }
 ): Promise<void> {
   await getDb().runAsync(
-    'UPDATE attendance SET name = ?, max_limit = ?, used = ? WHERE id = ?',
+    'UPDATE attendance SET name = ?, max_limit = ?, used = ?, missed_dates = ? WHERE id = ?',
     input.name,
     input.limit,
     input.used,
+    serializeMissedDates(input.missedDates ?? []),
     id
   );
 }

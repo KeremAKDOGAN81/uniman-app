@@ -10,6 +10,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { SymbolView } from 'expo-symbols';
 
 import { useColors } from '@/components/ui';
 import { eduCardShadow } from '@/lib/courseColor';
@@ -73,34 +74,19 @@ export function EduPageHeader({
   subtitle,
   badge,
   accentColor,
-  emoji,
+  right,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   badge?: string;
   accentColor?: string;
-  emoji?: string;
+  right?: ReactNode;
 }) {
   const c = useColors();
   const accent = accentColor ?? c.accent;
   return (
     <Animated.View entering={FadeInDown.duration(280)} style={{ gap: 8, marginBottom: 4 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        {emoji ? (
-          <View
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: `${accent}22`,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderWidth: 2,
-              borderColor: `${accent}33`,
-            }}>
-            <Text style={{ fontSize: 26 }}>{emoji}</Text>
-          </View>
-        ) : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
         <View style={{ flex: 1, gap: 6 }}>
           {badge ? (
             <View
@@ -116,13 +102,55 @@ export function EduPageHeader({
               </Text>
             </View>
           ) : null}
-          <Text style={{ color: c.text, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>{title}</Text>
+          {title ? (
+            <Text style={{ color: c.text, fontSize: 28, fontWeight: '900', letterSpacing: -0.8 }}>{title}</Text>
+          ) : null}
           {subtitle ? (
             <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20 }}>{subtitle}</Text>
           ) : null}
         </View>
+        {right}
       </View>
     </Animated.View>
+  );
+}
+
+export function EduIconButton({
+  label,
+  onPress,
+  symbol,
+}: {
+  label: string;
+  onPress: () => void;
+  symbol: { ios: string; android: string; web: string };
+}) {
+  const c = useColors();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={() => {
+        hapticSelect();
+        onPress();
+      }}
+      hitSlop={8}
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: `${c.accent}14`,
+        borderWidth: 1,
+        borderColor: c.line,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <SymbolView
+        name={symbol as never}
+        size={22}
+        tintColor={c.accent}
+        fallback={<Text style={{ color: c.accent, fontSize: 18, fontWeight: '800' }}>↗</Text>}
+      />
+    </Pressable>
   );
 }
 
@@ -776,17 +804,20 @@ export function EduJoinHero({
   title: string;
   subtitle: string;
   buttonLabel: string;
-  statLabel: string;
-  statValue: string;
-  timeLabel: string;
+  statLabel?: string;
+  statValue?: string | null;
+  timeLabel?: string | null;
   onPress?: () => void;
 }) {
   const c = useColors();
+  const showStat = Boolean(statValue);
+  const showTime = Boolean(timeLabel);
+  const showSide = showStat || showTime;
   return (
-    <View style={{ position: 'relative', marginBottom: 20 }}>
+    <View style={{ position: 'relative', marginBottom: 8 }}>
       <FauxGradient
         colors={eduGradients.hero}
-        style={{ borderRadius: 36, padding: 22, minHeight: 176, overflow: 'hidden' }}>
+        style={{ borderRadius: 36, padding: 22, minHeight: showSide ? 176 : 148, overflow: 'hidden' }}>
         <View
           style={{
             position: 'absolute',
@@ -829,27 +860,37 @@ export function EduJoinHero({
               <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>{buttonLabel}</Text>
             </Pressable>
           </View>
-          <View style={{ alignItems: 'flex-end', justifyContent: 'space-between', minHeight: 120 }}>
-            <View
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 36,
-                backgroundColor: 'rgba(255,255,255,0.55)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.7)',
-              }}>
-              <Text style={{ color: '#111827', fontWeight: '800', fontSize: 11, textAlign: 'center', lineHeight: 14 }}>
-                {statValue}
-              </Text>
-              <Text style={{ color: 'rgba(17,24,39,0.6)', fontSize: 9, textAlign: 'center', marginTop: 2 }}>
-                {statLabel}
-              </Text>
+          {showSide ? (
+            <View style={{ alignItems: 'flex-end', justifyContent: 'space-between', minHeight: showTime && showStat ? 120 : 72 }}>
+              {showStat ? (
+                <View
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 36,
+                    backgroundColor: 'rgba(255,255,255,0.55)',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.7)',
+                  }}>
+                  <Text style={{ color: '#111827', fontWeight: '800', fontSize: 11, textAlign: 'center', lineHeight: 14 }}>
+                    {statValue}
+                  </Text>
+                  {statLabel ? (
+                    <Text style={{ color: 'rgba(17,24,39,0.6)', fontSize: 9, textAlign: 'center', marginTop: 2 }}>
+                      {statLabel}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View />
+              )}
+              {showTime ? (
+                <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: -0.5 }}>{timeLabel}</Text>
+              ) : null}
             </View>
-            <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: -0.5 }}>{timeLabel}</Text>
-          </View>
+          ) : null}
         </View>
       </FauxGradient>
       <View

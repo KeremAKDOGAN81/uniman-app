@@ -8,6 +8,7 @@ import { TimePickerField } from '@/components/TimePickerField';
 import {
   EduActivityCard,
   EduFormCard,
+  EduIconButton,
   EduPageHeader,
   EduTimelineClassCard,
   EduWeekDateStrip,
@@ -246,13 +247,19 @@ export default function ScheduleScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
           <ScrollView ref={scrollRef} contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
-            <EduPageHeader title="Program" subtitle="Haftalık ders saatlerin ve hatırlatmalar." badge="Program" />
-
-            {schedule.length > 0 ? (
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-                <GhostButton label="Programı paylaş" onPress={() => shareSchedule(schedule)} />
-              </View>
-            ) : null}
+            <EduPageHeader
+              badge="Program"
+              subtitle="Haftalık ders saatlerin ve hatırlatmalar."
+              right={
+                schedule.length > 0 ? (
+                  <EduIconButton
+                    label="Programı paylaş"
+                    onPress={() => shareSchedule(schedule)}
+                    symbol={{ ios: 'square.and.arrow.up', android: 'share', web: 'share' }}
+                  />
+                ) : null
+              }
+            />
 
             <EduActivityCard
               label="Hatırlatılan ders"

@@ -83,6 +83,10 @@ npx eas-cli build --platform android --profile preview
 
 Download the APK from the Expo build page, copy to the phone, install (allow unknown sources). iPhone cannot install this APK.
 
+## Privacy
+
+Public policy (Google Play): [PRIVACY.md](PRIVACY.md)
+
 ## Docs
 
 Expo SDK reference: [docs.expo.dev v57](https://docs.expo.dev/versions/v57.0.0/)

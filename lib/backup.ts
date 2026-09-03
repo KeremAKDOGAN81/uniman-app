@@ -8,6 +8,7 @@ import type {
   ThemeName,
   UserProfile,
 } from '@/lib/types';
+import { parseMissedDates } from '@/lib/attendance';
 
 export const BACKUP_VERSION = 1;
 
@@ -55,7 +56,10 @@ export function parseBackup(raw: string): UniManBackup {
     schedule: parsed.schedule,
     reminders: parsed.reminders ?? [],
     examTargets: parsed.examTargets ?? [],
-    attendance: parsed.attendance ?? [],
+    attendance: (parsed.attendance ?? []).map((item) => ({
+      ...item,
+      missedDates: parseMissedDates(item.missedDates),
+    })),
     notes: parsed.notes ?? [],
   };
 }

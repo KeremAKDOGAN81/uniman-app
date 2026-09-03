@@ -45,7 +45,7 @@ export default function PrivacyScreen() {
 
           <Card style={{ gap: 10 }}>
             <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>İletişim</Text>
-            <Muted>Sorularınız için: privacy@uniman.app (yer tutucu)</Muted>
+            <Muted>Sorularınız için GitHub Issues: github.com/KeremAKDOGAN81/uniman-app</Muted>
           </Card>
         </ScrollView>
       </Screen>

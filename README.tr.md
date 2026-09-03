@@ -81,6 +81,10 @@ npx eas-cli build --platform android --profile preview
 
 Expo build sayfasından APK’yı indir, telefona at, kur. iPhone bu APK’yı kuramaz.
 
+## Gizlilik
+
+Play Store için kamu politikası: [PRIVACY.md](PRIVACY.md)
+
 ## Dokümantasyon
 
 Expo SDK: [docs.expo.dev v57](https://docs.expo.dev/versions/v57.0.0/)

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 
+import { AbsenceDatePicker } from '@/components/AbsenceDatePicker';
 import { DateTimePicker } from '@/components/DateTimePicker';
 import { CourseChipRow } from '@/components/CourseChipRow';
 import { SwipeTabShell } from '@/components/SwipeTabShell';
@@ -30,7 +31,7 @@ import { confirmDelete } from '@/lib/confirm';
 import { collectCourseNames } from '@/lib/courseCatalog';
 import { attendanceSubtitle, statAttendanceWarnings, statOpenReminders } from '@/lib/copy';
 import { colorForCourseName, emojiForCourse } from '@/lib/courseColor';
-import { formatCountdown, formatDateTime, isUpcoming, parseLocalDateTime, toDateInput } from '@/lib/dates';
+import { formatCountdown, formatDateTime, formatMissedDay, isUpcoming, parseLocalDateTime, toDateInput } from '@/lib/dates';
 import { findNextExam } from '@/lib/homeInsights';
 import { hapticSuccess } from '@/lib/haptics';
 import type { ReminderKind } from '@/lib/types';
@@ -59,6 +60,8 @@ export default function TrackScreen() {
   const addAttendance = useAppStore((state) => state.addAttendance);
   const updateAttendance = useAppStore((state) => state.updateAttendance);
   const bumpAttendance = useAppStore((state) => state.bumpAttendance);
+  const recordAttendanceAbsence = useAppStore((state) => state.recordAttendanceAbsence);
+  const removeAttendanceDate = useAppStore((state) => state.removeAttendanceDate);
   const removeAttendance = useAppStore((state) => state.removeAttendance);
   const now = useClock(15000);
 
@@ -100,6 +103,8 @@ export default function TrackScreen() {
   const [time, setTime] = useState('09:00');
 
   const [editingAttendanceId, setEditingAttendanceId] = useState<number | null>(null);
+  const [pickingAttendanceId, setPickingAttendanceId] = useState<number | null>(null);
+  const [absenceDate, setAbsenceDate] = useState(toDateInput());
   const [courseName, setCourseName] = useState('');
 
   useEffect(() => {
@@ -185,17 +190,46 @@ export default function TrackScreen() {
     resetAttendanceForm();
   };
 
+  const saveAbsenceDate = async (id: number, date: string) => {
+    const result = await recordAttendanceAbsence(id, date);
+    if (result === 'full') {
+      Alert.alert('Limit doldu', 'Bu ders için devamsızlık hakkın bitti.');
+      return;
+    }
+    if (result === 'duplicate') {
+      Alert.alert('Zaten kayıtlı', 'Bu gün için zaten devamsızlık var.');
+      return;
+    }
+    if (result === 'ok') {
+      hapticSuccess();
+      setPickingAttendanceId(null);
+    }
+  };
+
+  const onAddAbsence = (id: number, name: string) => {
+    Alert.alert('Devamsızlık ekle', `${name} için gelmediğin günü kaydedebilirsin.`, [
+      { text: 'Bugün', onPress: () => void saveAbsenceDate(id, toDateInput()) },
+      {
+        text: 'Gün seç',
+        onPress: () => {
+          setPickingAttendanceId(id);
+          setAbsenceDate(toDateInput());
+        },
+      },
+      { text: 'Tarihsiz +1', onPress: () => void bumpAttendance(id, 1) },
+      { text: 'Vazgeç', style: 'cancel' },
+    ]);
+  };
+
   return (
     <SwipeTabShell tab="track">
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
           <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
             <EduPageHeader
-              title="Takip"
+              badge="Takip"
               subtitle="Sınav, ödev hatırlatmaları ve devamsızlık."
-              badge="Track"
               accentColor={c.warning}
-              emoji="🔔"
             />
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -382,7 +416,7 @@ export default function TrackScreen() {
                   <EmptyState
                     emoji="📉"
                     title="Devamsızlık takibi yok"
-                    body="Ders adı ve maksimum hak gir. %75 dolunca ana sayfada uyarı görünür."
+                    body="Ders adı ve maksimum hak gir. İstersen gelmediğin günü de kaydet."
                     actionLabel="Ders ekle"
                     onAction={() => {
                       setCourseName('Algoritma');
@@ -396,17 +430,56 @@ export default function TrackScreen() {
                       const ratio = item.limit === 0 ? 0 : Math.min(1, item.used / item.limit);
                       const bar = ratio >= 0.8 ? c.danger : ratio >= 0.5 ? c.warning : c.success;
                       const accent = colorForCourseName(item.name, schedule);
+                      const picking = pickingAttendanceId === item.id;
                       return (
                         <EduProgressCard
                           key={item.id}
                           accent={accent}
                           emoji={emojiForCourse(item.name)}
                           title={item.name}
-                          subtitle={attendanceSubtitle(item.used, item.limit)}
+                          subtitle={attendanceSubtitle(item.used, item.limit, item.missedDates.length)}
                           ratio={ratio}
                           progressColor={bar}>
+                          {item.missedDates.length > 0 ? (
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                              {item.missedDates.map((missed) => (
+                                <Pressable
+                                  key={missed}
+                                  onPress={() =>
+                                    confirmDelete('Bu gün silinsin mi?', formatMissedDay(missed), () =>
+                                      removeAttendanceDate(item.id, missed)
+                                    )
+                                  }
+                                  style={{
+                                    paddingHorizontal: 10,
+                                    paddingVertical: 6,
+                                    borderRadius: 999,
+                                    backgroundColor: `${c.danger}14`,
+                                    borderWidth: 1,
+                                    borderColor: c.line,
+                                  }}>
+                                  <Text style={{ color: c.text, fontSize: 12, fontWeight: '700' }}>
+                                    {formatMissedDay(missed)}  ×
+                                  </Text>
+                                </Pressable>
+                              ))}
+                            </View>
+                          ) : (
+                            <Muted>Gün kaydı yok — istersen gelmediğin tarihi ekle.</Muted>
+                          )}
+                          {picking ? (
+                            <View style={{ gap: 8 }}>
+                              <AbsenceDatePicker
+                                selected={absenceDate}
+                                disabledDates={item.missedDates}
+                                onSelect={setAbsenceDate}
+                              />
+                              <PrimaryButton label="Bu günü kaydet" onPress={() => void saveAbsenceDate(item.id, absenceDate)} />
+                              <GhostButton label="Vazgeç" onPress={() => setPickingAttendanceId(null)} />
+                            </View>
+                          ) : null}
                           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                            <GhostButton label="+ Devamsızlık" onPress={() => bumpAttendance(item.id, 1)} />
+                            <GhostButton label="+ Devamsızlık" onPress={() => onAddAbsence(item.id, item.name)} />
                             <GhostButton label="− Düzelt" onPress={() => bumpAttendance(item.id, -1)} />
                             <GhostButton
                               label="Düzenle"

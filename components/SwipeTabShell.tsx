@@ -1,6 +1,5 @@
-import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { PanResponder, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -98,29 +97,39 @@ export function SwipeTabShell({ tab, children }: { tab: SwipeTabKey; children: R
     [tab, width, navigateTo, isAnimating, translateX]
   );
 
-  const pan = Gesture.Pan()
-    .activeOffsetX([-14, 14])
-    .failOffsetY([-10, 10])
-    .onStart(() => {
-      if (isAnimating.value) return;
-    })
-    .onUpdate((event) => {
-      if (isAnimating.value) return;
-      const maxDrag = width * 0.38;
-      translateX.value = Math.max(-maxDrag, Math.min(maxDrag, event.translationX));
-    })
-    .onEnd((event) => {
-      if (isAnimating.value) return;
-      const shouldNext = event.translationX < -44 || event.velocityX < -380;
-      const shouldPrev = event.translationX > 44 || event.velocityX > 380;
-      if (shouldNext) {
-        runOnJS(goToWithAnimation)(next.key, 'forward');
-      } else if (shouldPrev) {
-        runOnJS(goToWithAnimation)(prev.key, 'back');
-      } else {
-        translateX.value = withSpring(0, motionSpring.tab);
-      }
-    });
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_evt, gesture) =>
+          !isAnimating.value && Math.abs(gesture.dx) > 18 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25,
+        onMoveShouldSetPanResponderCapture: (_evt, gesture) =>
+          !isAnimating.value && Math.abs(gesture.dx) > 24 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: (_evt, gesture) => {
+          if (isAnimating.value) return;
+          const maxDrag = width * 0.38;
+          translateX.value = Math.max(-maxDrag, Math.min(maxDrag, gesture.dx));
+        },
+        onPanResponderRelease: (_evt, gesture) => {
+          if (isAnimating.value) return;
+          const shouldNext = gesture.dx < -48 || gesture.vx < -0.6;
+          const shouldPrev = gesture.dx > 48 || gesture.vx > 0.6;
+          if (shouldNext) {
+            goToWithAnimation(next.key, 'forward');
+          } else if (shouldPrev) {
+            goToWithAnimation(prev.key, 'back');
+          } else {
+            translateX.value = withSpring(0, motionSpring.tab);
+          }
+        },
+        onPanResponderTerminate: () => {
+          if (!isAnimating.value) {
+            translateX.value = withSpring(0, motionSpring.tab);
+          }
+        },
+      }),
+    [goToWithAnimation, isAnimating, next.key, prev.key, translateX, width]
+  );
 
   const contentStyle = useAnimatedStyle(() => {
     const progress = Math.abs(translateX.value) / Math.max(width * 0.38, 1);
@@ -141,7 +150,7 @@ export function SwipeTabShell({ tab, children }: { tab: SwipeTabKey; children: R
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }} edges={['top']}>
       <EduBackdrop />
-      <GestureDetector gesture={pan}>
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
         <View style={{ zIndex: 2 }}>
           <Animated.View
             style={[
@@ -223,8 +232,8 @@ export function SwipeTabShell({ tab, children }: { tab: SwipeTabKey; children: R
             })}
           </View>
         </View>
-      </GestureDetector>
-      <Animated.View style={[{ flex: 1, zIndex: 1 }, contentStyle]}>{children}</Animated.View>
+        <Animated.View style={[{ flex: 1, zIndex: 1 }, contentStyle]}>{children}</Animated.View>
+      </View>
     </SafeAreaView>
   );
 }

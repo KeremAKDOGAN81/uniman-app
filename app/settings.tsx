@@ -142,6 +142,13 @@ export default function SettingsScreen() {
             <Text style={{ color: c.text, fontWeight: '800', fontSize: 16 }}>Gizlilik</Text>
             <Muted>Veriler yalnızca bu cihazda tutulur. Hesap yoktur.</Muted>
             <GhostButton label="Gizlilik metnini aç" onPress={() => router.push('/privacy' as never)} />
+            <GhostButton
+              label="Tanıtımı göster"
+              onPress={async () => {
+                await useAppStore.getState().resetIntro();
+                router.replace('/onboarding' as never);
+              }}
+            />
           </Card>
 
           <Animated.View entering={FadeInDown.delay(240).duration(300).springify()}>

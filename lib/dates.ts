@@ -71,6 +71,34 @@ export function toDateInput(date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
+export function parseDateInput(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function formatMissedDay(value: string): string {
+  const date = parseDateInput(value);
+  if (!date) return value;
+  const today = toDateInput();
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  if (value === today) return 'Bugün';
+  if (value === toDateInput(yest)) return 'Dün';
+  return date.toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+export function recentDateInputs(daysBack = 70): string[] {
+  const dates: string[] = [];
+  const now = new Date();
+  for (let offset = 0; offset <= daysBack; offset++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
+    dates.push(toDateInput(day));
+  }
+  return dates;
+}
+
 export function formatDateTime(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleString('tr-TR', {

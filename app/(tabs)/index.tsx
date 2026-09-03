@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import {
@@ -8,10 +8,8 @@ import {
   EduJoinHero,
   EduListRow,
   EduOngoingCourseCard,
-  EduPurpleBar,
   EduSectionTitle,
   EduUnifiedCourseCard,
-  EduWeeklySummaryCard,
   greetingForHour,
 } from '@/components/edu';
 import { SwipeTabShell } from '@/components/SwipeTabShell';
@@ -20,7 +18,6 @@ import { hrefForSwipeTab } from '@/constants/swipeTabs';
 import { useClock } from '@/hooks/useClock';
 import { buildCourseCatalog } from '@/lib/courseCatalog';
 import { eduCardShadow, emojiForCourse, progressToneForColor } from '@/lib/courseColor';
-import { buildMorningSummary } from '@/lib/morningSummary';
 import {
   formatCountdown,
   formatDateTime,
@@ -31,9 +28,8 @@ import {
   pickNowAndNext,
   todayWeekday,
 } from '@/lib/dates';
-import { computeWeeklySummary, findNextExam } from '@/lib/homeInsights';
+import { findNextExam } from '@/lib/homeInsights';
 import { displayName, profileSubtitle } from '@/lib/profile';
-import { findFreeHoursToday } from '@/lib/freeHours';
 import { computeGpa100, computeGpa4, formatGpa } from '@/lib/gpa';
 import { filterCoursesBySemester } from '@/lib/semester';
 import type { Reminder, ScheduleItem } from '@/lib/types';
@@ -91,26 +87,7 @@ export default function HomeScreen() {
     return todaysClasses.length;
   }, [todaysClasses, current, next]);
 
-  const weeklySummary = useMemo(
-    () =>
-      computeWeeklySummary({
-        scheduleCount: schedule.length,
-        reminders,
-        attendance,
-        courses: semesterCourses,
-        now,
-      }),
-    [schedule.length, reminders, attendance, semesterCourses, now]
-  );
-
   const nextExam = useMemo(() => findNextExam(reminders, now), [reminders, now]);
-
-  const freeSlots = useMemo(() => findFreeHoursToday(schedule), [schedule]);
-
-  const morningSummary = useMemo(
-    () => buildMorningSummary(schedule, reminders, now),
-    [schedule, reminders, now]
-  );
 
   const catalog = useMemo(
     () => buildCourseCatalog({ courses, schedule, attendance, examTargets, notes, reminders }),
@@ -143,7 +120,7 @@ export default function HomeScreen() {
         title: 'Hafta sonu — program duruyor',
         subtitle: 'Pazartesi gelince burası dolacak',
         button: 'Program kur',
-        time: '--:--',
+        time: null,
         action: () => router.navigate(hrefForSwipeTab('schedule') as never),
       };
     }
@@ -152,7 +129,7 @@ export default function HomeScreen() {
         title: 'Bugün ders yok',
         subtitle: `${today} için program ekle`,
         button: 'Ders ekle',
-        time: '--:--',
+        time: null,
         action: () => router.navigate(hrefForSwipeTab('schedule') as never),
       };
     }
@@ -160,7 +137,7 @@ export default function HomeScreen() {
       title: 'Bugünkü dersler bitti',
       subtitle: 'Yarın için hazırlan',
       button: 'Program',
-      time: now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }),
+      time: null,
       action: () => router.navigate(hrefForSwipeTab('schedule') as never),
     };
   }, [current, next, today, todaysClasses.length, now, router]);
@@ -191,35 +168,8 @@ export default function HomeScreen() {
         onPress: () => router.navigate(hrefForSwipeTab('schedule') as never),
       });
     });
-    examTargets.slice(0, 2).forEach((item) => {
-      const courseColor = progressToneForColor(c.accent);
-      cards.push({
-        key: `e-${item.id}`,
-        emoji: '🎯',
-        color: c.accent,
-        title: item.name,
-        subtitle: `Final hedefi: ${item.requiredFinal > 0 ? item.requiredFinal : 'Geçti'}`,
-        tags: ['Final'],
-        progress: 'Hesap',
-        progressColor: courseColor,
-        onPress: () => router.navigate(hrefForSwipeTab('calculator') as never),
-      });
-    });
-    if (cards.length === 0) {
-      cards.push({
-        key: 'empty',
-        emoji: '📅',
-        color: c.accent,
-        title: 'Programını kur',
-        subtitle: 'Program sekmesinden ders ekle',
-        tags: ['Program'],
-        progress: 'Başla',
-        progressColor: progressToneForColor(c.accent),
-        onPress: () => router.navigate(hrefForSwipeTab('schedule') as never),
-      });
-    }
     return cards;
-  }, [todaysClasses, examTargets, router, c.accent]);
+  }, [todaysClasses, router, c.accent]);
 
   const feedItems = useMemo(() => {
     const rows: { key: string; emoji: string; title: string; subtitle: string; accent: string; onPress: () => void }[] = [];
@@ -271,36 +221,11 @@ export default function HomeScreen() {
           title={hero.title}
           subtitle={hero.subtitle}
           buttonLabel={hero.button}
-          statLabel="Bugünkü ders"
-          statValue={todaysClasses.length ? `${joinedToday}/${todaysClasses.length}` : '0/0'}
+          statLabel={todaysClasses.length ? 'Bugünkü ders' : undefined}
+          statValue={todaysClasses.length ? `${joinedToday}/${todaysClasses.length}` : null}
           timeLabel={hero.time}
           onPress={hero.action}
         />
-
-        {schedule.length > 0 ? (
-          <Pressable
-            onPress={() => router.push('/weekly-report' as never)}
-            style={({ pressed }) => ({ opacity: pressed ? 0.94 : 1 })}>
-            <View
-              style={{
-                backgroundColor: c.card,
-                borderRadius: 28,
-                padding: 18,
-                borderWidth: 1,
-                borderColor: c.line,
-                gap: 6,
-                ...eduCardShadow,
-              }}>
-              <Text style={{ color: c.muted, fontSize: 12, fontWeight: '800', letterSpacing: 0.3 }}>BUGÜN</Text>
-              <Text style={{ color: c.text, fontSize: 16, fontWeight: '800', lineHeight: 22 }}>{morningSummary.title}</Text>
-              <Text style={{ color: c.muted, fontSize: 14, lineHeight: 20 }}>{morningSummary.body}</Text>
-            </View>
-          </Pressable>
-        ) : null}
-
-        {schedule.length > 0 || courses.length > 0 || openReminders.length > 0 ? (
-          <EduWeeklySummaryCard line={weeklySummary.line} />
-        ) : null}
 
         {catalog.length > 0 ? (
           <View style={{ gap: 10 }}>
@@ -325,26 +250,30 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        <EduSectionTitle
-          title="Bugünkü dersler"
-          action="Tümü"
-          onAction={() => router.navigate(hrefForSwipeTab('schedule') as never)}
-        />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
-          {ongoingCards.map((card) => (
-            <EduOngoingCourseCard
-              key={card.key}
-              emoji={card.emoji}
-              iconColor={card.color}
-              title={card.title}
-              subtitle={card.subtitle}
-              tags={card.tags}
-              progressLabel={card.progress}
-              progressColor={card.progressColor}
-              onPress={card.onPress}
+        {todaysClasses.length > 0 ? (
+          <>
+            <EduSectionTitle
+              title="Bugünkü dersler"
+              action="Tümü"
+              onAction={() => router.navigate(hrefForSwipeTab('schedule') as never)}
             />
-          ))}
-        </ScrollView>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
+              {ongoingCards.map((card) => (
+                <EduOngoingCourseCard
+                  key={card.key}
+                  emoji={card.emoji}
+                  iconColor={card.color}
+                  title={card.title}
+                  subtitle={card.subtitle}
+                  tags={card.tags}
+                  progressLabel={card.progress}
+                  progressColor={card.progressColor}
+                  onPress={card.onPress}
+                />
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
 
         {semesterCourses.length > 0 ? (
           <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -396,32 +325,6 @@ export default function HomeScreen() {
             ))}
           </View>
         ) : null}
-
-        {freeSlots.length > 0 ? (
-          <View style={{ gap: 8 }}>
-            <EduSectionTitle title="Boş saatlerin" action="Odak" onAction={() => router.push('/focus' as never)} />
-            {freeSlots.slice(0, 3).map((slot) => (
-              <EduListRow
-                key={`${slot.startTime}-${slot.endTime}`}
-                emoji="☕"
-                title={`${slot.startTime} – ${slot.endTime}`}
-                subtitle={`${formatDurationMinutes(slot.durationMinutes)} boş — odak başlat`}
-                accent={c.teal}
-                onPress={() =>
-                  router.push({
-                    pathname: '/focus',
-                    params: { minutes: String(Math.min(slot.durationMinutes, 45)) },
-                  } as never)
-                }
-              />
-            ))}
-          </View>
-        ) : null}
-
-        <View style={{ gap: 8 }}>
-          <EduPurpleBar label="Haftalık rapor" onPress={() => router.push('/weekly-report' as never)} />
-          <EduPurpleBar label="Program zaman çizelgesi" onPress={() => router.navigate(hrefForSwipeTab('schedule') as never)} />
-        </View>
       </ScrollView>
     </SwipeTabShell>
   );

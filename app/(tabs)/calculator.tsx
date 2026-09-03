@@ -144,11 +144,9 @@ export default function CalculatorScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
           <EduPageHeader
-            title="Hesap"
-            subtitle="Final hedefi ve dönem ortalamasını hesapla."
             badge="Hesap"
+            subtitle="Final hedefi ve dönem ortalamasını hesapla."
             accentColor={c.success}
-            emoji="🧮"
           />
 
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 4 }}>

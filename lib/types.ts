@@ -73,6 +73,8 @@ export type AttendanceItem = {
   name: string;
   used: number;
   limit: number;
+  /** YYYY-MM-DD — isteğe bağlı, hangi gün gelinmediği */
+  missedDates: string[];
 };
 
 export type Note = {

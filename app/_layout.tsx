@@ -3,7 +3,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { palettes } from '@/constants/theme';
@@ -30,8 +29,6 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
     const onOnboarding = String(segments[0] ?? '') === 'onboarding';
     if (!profileComplete && !onOnboarding) {
       router.replace('/onboarding' as never);
-    } else if (profileComplete && onOnboarding) {
-      router.replace('/(tabs)' as never);
     }
   }, [ready, profileComplete, segments, router]);
 
@@ -47,10 +44,16 @@ export default function RootLayout() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      await configureNotifications();
-      await hydrate();
-      if (!cancelled) {
-        await SplashScreen.hideAsync();
+      try {
+        await configureNotifications();
+        await hydrate();
+      } catch (error) {
+        console.error('App hydrate failed', error);
+        useAppStore.setState({ ready: true });
+      } finally {
+        if (!cancelled) {
+          await SplashScreen.hideAsync().catch(() => undefined);
+        }
       }
     })();
     return () => {
@@ -79,7 +82,7 @@ export default function RootLayout() {
   };
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <View style={{ flex: 1 }}>
       <ThemeProvider value={navTheme}>
         <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
         <OnboardingGate>
@@ -115,6 +118,6 @@ export default function RootLayout() {
           <ToastHost />
         </OnboardingGate>
       </ThemeProvider>
-    </GestureHandlerRootView>
+    </View>
   );
 }

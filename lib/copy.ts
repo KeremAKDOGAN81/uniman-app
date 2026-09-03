@@ -60,10 +60,17 @@ export function statNoteTags(tagCount: number): StatCopy {
   return { label: 'Ders etiketi', value: String(tagCount), hint: 'Farklı ders' };
 }
 
-export function attendanceSubtitle(used: number, limit: number): string {
+export function attendanceSubtitle(used: number, limit: number, datedCount = 0): string {
   if (limit <= 0) return 'Limit tanımlı değil';
-  if (used >= limit) return `${used}/${limit} hak — limit doldu`;
+  if (used >= limit) {
+    return datedCount > 0
+      ? `${used}/${limit} hak doldu · ${datedCount} gün kayıtlı`
+      : `${used}/${limit} hak — limit doldu`;
+  }
   const left = limit - used;
+  if (datedCount > 0) {
+    return `${used}/${limit} kullanıldı · ${datedCount} gün seçili · ${left} kaldı`;
+  }
   return `${used}/${limit} hak kullanıldı · ${left} kaldı`;
 }
 

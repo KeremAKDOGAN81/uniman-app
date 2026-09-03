@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { parseMissedDates } from '@/lib/attendance';
 import { parseBackup, type UniManBackup } from '@/lib/backup';
 import {
   deleteAttendance,
@@ -96,6 +97,7 @@ type AppState = {
   setActiveSemester: (value: string) => Promise<void>;
   toggleTheme: () => Promise<void>;
   completeIntro: () => Promise<void>;
+  resetIntro: () => Promise<void>;
   saveProfile: (input: UserProfile) => Promise<void>;
   completeOnboarding: () => Promise<void>;
   addCourse: (input: {
@@ -174,6 +176,8 @@ type AppState = {
   addAttendance: (input: { name: string; limit: number }) => Promise<void>;
   updateAttendance: (id: number, input: { name: string; limit: number }) => Promise<void>;
   bumpAttendance: (id: number, delta: number) => Promise<void>;
+  recordAttendanceAbsence: (id: number, date: string) => Promise<'ok' | 'full' | 'duplicate' | 'missing'>;
+  removeAttendanceDate: (id: number, date: string) => Promise<void>;
   removeAttendance: (id: number) => Promise<void>;
   addNote: (input: { title: string; body: string; courseName?: string; imageUri?: string }) => Promise<void>;
   updateNote: (
@@ -291,6 +295,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   completeIntro: async () => {
     await setIntroDone(true);
     set({ introDone: true });
+  },
+
+  resetIntro: async () => {
+    await setIntroDone(false);
+    set({ introDone: false });
   },
 
   saveProfile: async (input) => {
@@ -582,10 +591,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const current = get().attendance.find((item) => item.id === id);
     if (!current) return;
     const used = Math.min(current.used, input.limit);
-    await updateAttendanceRow(id, { name: input.name, limit: input.limit, used });
+    const missedDates = parseMissedDates(current.missedDates).slice(0, used);
+    await updateAttendanceRow(id, { name: input.name, limit: input.limit, used, missedDates });
     set({
       attendance: get().attendance.map((item) =>
-        item.id === id ? { ...item, name: input.name, limit: input.limit, used } : item
+        item.id === id ? { ...item, name: input.name, limit: input.limit, used, missedDates } : item
       ),
     });
   },
@@ -595,9 +605,38 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!current) return;
     const used = Math.min(current.limit, Math.max(0, current.used + delta));
     if (used === current.used) return;
-    await updateAttendanceUsed(id, used);
+    const missedDates = parseMissedDates(current.missedDates).slice(0, used);
+    await updateAttendanceUsed(id, used, missedDates);
     set({
-      attendance: get().attendance.map((item) => (item.id === id ? { ...item, used } : item)),
+      attendance: get().attendance.map((item) => (item.id === id ? { ...item, used, missedDates } : item)),
+    });
+  },
+
+  recordAttendanceAbsence: async (id, date) => {
+    const current = get().attendance.find((item) => item.id === id);
+    if (!current) return 'missing';
+    if (current.used >= current.limit) return 'full';
+    const existing = parseMissedDates(current.missedDates);
+    if (existing.includes(date)) return 'duplicate';
+    const missedDates = parseMissedDates([date, ...existing]);
+    const used = current.used + 1;
+    await updateAttendanceUsed(id, used, missedDates);
+    set({
+      attendance: get().attendance.map((item) => (item.id === id ? { ...item, used, missedDates } : item)),
+    });
+    return 'ok';
+  },
+
+  removeAttendanceDate: async (id, date) => {
+    const current = get().attendance.find((item) => item.id === id);
+    if (!current) return;
+    const nextDates = parseMissedDates(current.missedDates).filter((item) => item !== date);
+    if (nextDates.length === parseMissedDates(current.missedDates).length) return;
+    const used = Math.max(0, current.used - 1);
+    const missedDates = nextDates.slice(0, used);
+    await updateAttendanceUsed(id, used, missedDates);
+    set({
+      attendance: get().attendance.map((item) => (item.id === id ? { ...item, used, missedDates } : item)),
     });
   },
 
@@ -731,6 +770,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         name: item.name,
         used: item.used,
         limit: item.limit,
+        missedDates: item.missedDates,
       });
     }
     for (const note of data.notes) {

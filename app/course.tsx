@@ -13,7 +13,7 @@ import {
 } from '@/components/edu';
 import { Card, EmptyState, GhostButton, Muted, PrimaryButton, Screen, Title, useColors } from '@/components/ui';
 import { buildCourseCatalog, findCatalogEntry } from '@/lib/courseCatalog';
-import { formatDateTime, formatDurationMinutes, minutesFromClock } from '@/lib/dates';
+import { formatDateTime, formatDurationMinutes, formatMissedDay, minutesFromClock, toDateInput } from '@/lib/dates';
 import { renderMarkdownPreview } from '@/lib/markdownPreview';
 import { normalizeCourseName } from '@/lib/courseColor';
 import { hapticSuccess } from '@/lib/haptics';
@@ -35,6 +35,7 @@ export default function CourseHubScreen() {
   const notes = useAppStore((s) => s.notes);
   const reminders = useAppStore((s) => s.reminders);
   const bumpAttendance = useAppStore((s) => s.bumpAttendance);
+  const recordAttendanceAbsence = useAppStore((s) => s.recordAttendanceAbsence);
   const ensureAttendanceForCourse = useAppStore((s) => s.ensureAttendanceForCourse);
 
   const catalog = useMemo(
@@ -61,7 +62,15 @@ export default function CourseHubScreen() {
       normalizeCourseName(item.title) === normalized
   );
 
-  const onBumpAttendance = async () => {
+  const onBumpAttendance = () => {
+    Alert.alert('Devamsızlık ekle', 'Gelmediğin günü kaydedebilirsin.', [
+      { text: 'Bugün', onPress: () => void saveAbsence(toDateInput()) },
+      { text: 'Tarihsiz +1', onPress: () => void saveAbsence() },
+      { text: 'Vazgeç', style: 'cancel' },
+    ]);
+  };
+
+  const saveAbsence = async (date?: string) => {
     let row = attendanceRow;
     if (!row) {
       await ensureAttendanceForCourse(entry!.name);
@@ -72,9 +81,18 @@ export default function CourseHubScreen() {
       Alert.alert('Limit doldu', `${entry!.name} için devamsızlık hakkın bitti (${row.limit}).`);
       return;
     }
-    await bumpAttendance(row.id, 1);
+    if (date) {
+      const result = await recordAttendanceAbsence(row.id, date);
+      if (result === 'duplicate') {
+        Alert.alert('Zaten kayıtlı', 'Bu gün için zaten devamsızlık var.');
+        return;
+      }
+      if (result !== 'ok') return;
+    } else {
+      await bumpAttendance(row.id, 1);
+    }
     hapticSuccess();
-    toast('Devamsızlık kaydedildi');
+    toast(date ? `Devamsızlık: ${formatMissedDay(date)}` : 'Devamsızlık kaydedildi');
   };
 
   if (!courseName || !entry) {
@@ -202,6 +220,11 @@ export default function CourseHubScreen() {
                   <Muted>
                     {attendanceRow.used} / {attendanceRow.limit} kullanıldı
                   </Muted>
+                  {attendanceRow.missedDates.length > 0 ? (
+                    <Muted>
+                      Günler: {attendanceRow.missedDates.map((d) => formatMissedDay(d)).join(', ')}
+                    </Muted>
+                  ) : null}
                 </Card>
               ) : null}
               {finalTarget ? (

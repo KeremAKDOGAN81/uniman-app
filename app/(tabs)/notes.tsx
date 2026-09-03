@@ -139,13 +139,7 @@ export default function NotesScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Screen>
           <ScrollView contentContainerStyle={{ paddingBottom: 36, gap: 14 }} showsVerticalScrollIndicator={false}>
-            <EduPageHeader
-              title="Notlar"
-              subtitle="Ders notlarını kaydet, etiketle ve ara."
-              badge="Notes"
-              accentColor={c.pink}
-              emoji="📝"
-            />
+            <EduPageHeader badge="Notlar" subtitle="Ders notlarını kaydet, etiketle ve ara." accentColor={c.pink} />
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <EduStatTile
